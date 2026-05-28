@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "observer-fleet-mathematics"
+version = "0.1.0"
+description = "Classify mathematical landscapes by calibrated observer-return fingerprints."
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "Ryan McKenna"}]
+dependencies = [
+    "mpmath>=1.3.0",
+]
+
+[project.optional-dependencies]
+plots = ["matplotlib>=3.8"]
+dev = ["pytest>=8.0"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
