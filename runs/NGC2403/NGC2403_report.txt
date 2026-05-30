@@ -1,0 +1,37 @@
+────────────────────────────────────────────────────────────────────────
+  GALAXY: NGC2403
+────────────────────────────────────────────────────────────────────────
+  Distance        : 3.16 Mpc
+  Data rows used  : 73
+  Radius range    : 0.16 – 20.87 kpc
+
+  ┌──────────────────────────────────────────┬──────────┬──────────┐
+  │  Model                                   │ RMSE     │  χ²_red  │
+  ├──────────────────────────────────────────┼──────────┼──────────┤
+  │  Baryon-only (ϒ=0.5, 0.7)                 │   50.701 │ 4374.210 │
+  │  OFR direct (ϒ_opt, 1 free param)         │   34.730 │ 1151.197 │
+  │  pISO halo                                │    3.846 │   20.776 │
+  │  NFW halo                                 │    3.342 │   14.742 │
+  │  Burkert halo                             │    3.743 │   21.648 │
+  │  MOND (RAR, g†=1.2e-10, ϒ=0.5)            │    6.412 │   75.667 │
+  └──────────────────────────────────────────┴──────────┴──────────┘
+
+  Best non-OFR model  : NFW halo  (RMSE = 3.342 km/s)
+
+  Residual positive fraction (Vobs > Vbar)  : 1.000
+
+  Mass discrepancy  D = Vobs² / Vbar²
+    Mean            : 3.177
+    Median          : 2.277
+    Range           : 1.675 – 6.847
+
+  ϒ uncertainty test  (ϒ_disk up to 0.7)
+    Positive-residual fraction at max ϒ  : 1.000
+    Residual survives?                   : True
+
+  Best-fit parameters:
+    OFR direct (ϒ_opt, 1 free param): ϒ_disk=1.436  ϒ_bul=2.011
+    pISO halo: ϒ_disk=0.795  p1=21128988.8544  p2=4.3327
+    NFW halo: ϒ_disk=0.457  p1=7567185.0073  p2=13.3296
+    Burkert halo: ϒ_disk=0.804  p1=21670612.7702  p2=7.6599
+
