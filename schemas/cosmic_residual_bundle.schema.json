@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/RDM3DC/Observer-Fleet-Mathematics/schemas/cosmic_residual_bundle.schema.json",
+  "title": "Cosmic Residual Bundle Schema",
+  "description": "Mission 008 residual-only input for p=5/p=7 Phase-Lift consensus fingerprints.",
+  "type": "object",
+  "required": ["metadata", "clock_set", "layers"],
+  "properties": {
+    "metadata": {
+      "type": "object",
+      "required": ["name", "source", "description"],
+      "properties": {
+        "name": {"type": "string"},
+        "source": {"type": "string"},
+        "description": {"type": "string"},
+        "created_by": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "clock_set": {
+      "type": "array",
+      "description": "Maximal observer clocks to test consensus across small prime fields.",
+      "items": {
+        "type": "object",
+        "required": ["name", "modulus", "a", "b", "seed"],
+        "properties": {
+          "name": {"type": "string"},
+          "modulus": {"type": "integer"},
+          "a": {"type": "integer"},
+          "b": {"type": "integer"},
+          "seed": {
+            "type": "array",
+            "items": {"type": "integer"},
+            "minItems": 2,
+            "maxItems": 2
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "layers": {
+      "type": "object",
+      "required": ["hz", "bao", "cmb"],
+      "properties": {
+        "hz": {"$ref": "#/$defs/residual_layer"},
+        "bao": {"$ref": "#/$defs/residual_layer"},
+        "cmb": {"$ref": "#/$defs/residual_layer"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "residual_layer": {
+      "type": "object",
+      "required": ["name", "x_unit", "residual_unit", "points"],
+      "properties": {
+        "name": {"type": "string"},
+        "x_unit": {"type": "string"},
+        "residual_unit": {"type": "string"},
+        "model_name": {"type": "string"},
+        "points": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["x", "residual"],
+            "properties": {
+              "x": {"type": "number"},
+              "residual": {"type": "number"},
+              "sigma": {"type": "number"},
+              "mask": {"type": "boolean"},
+              "tag": {"type": "string"}
+            },
+            "additionalProperties": true
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
