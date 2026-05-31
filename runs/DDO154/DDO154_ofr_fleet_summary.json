@@ -1,0 +1,73 @@
+{
+  "galaxy": "DDO154",
+  "rows_used": 12,
+  "radius_min_kpc": 0.49,
+  "radius_max_kpc": 5.92,
+  "ups_disk": 0.5,
+  "ups_bulge": 0.7,
+  "best_non_OFR_model": {
+    "model": "Burkert",
+    "rmse_km_s": 1.0319942923044345,
+    "rho0": 26009143.477348574,
+    "scale_radius_kpc": 2.6125786163522013,
+    "rho_s": NaN,
+    "a0_toy_units": NaN
+  },
+  "model_comparison": [
+    {
+      "model": "OFR_direct_residual",
+      "rmse_km_s": 2.0511601988091347e-15,
+      "rho0": NaN,
+      "scale_radius_kpc": NaN,
+      "rho_s": NaN,
+      "a0_toy_units": NaN
+    },
+    {
+      "model": "Burkert",
+      "rmse_km_s": 1.0319942923044345,
+      "rho0": 26009143.477348574,
+      "scale_radius_kpc": 2.6125786163522013,
+      "rho_s": NaN,
+      "a0_toy_units": NaN
+    },
+    {
+      "model": "pISO",
+      "rmse_km_s": 1.2193820232943315,
+      "rho0": 26705794.609854046,
+      "scale_radius_kpc": 1.4395973154362416,
+      "rho_s": NaN,
+      "a0_toy_units": NaN
+    },
+    {
+      "model": "NFW",
+      "rmse_km_s": 2.4309629428150465,
+      "rho0": NaN,
+      "scale_radius_kpc": 19.77358490566038,
+      "rho_s": 977048.1491765383,
+      "a0_toy_units": NaN
+    },
+    {
+      "model": "MOND_like",
+      "rmse_km_s": 2.5493645937384652,
+      "rho0": NaN,
+      "scale_radius_kpc": NaN,
+      "rho_s": NaN,
+      "a0_toy_units": 2530.5799522673033
+    },
+    {
+      "model": "baryon_only",
+      "rmse_km_s": 23.71217692693497,
+      "rho0": NaN,
+      "scale_radius_kpc": NaN,
+      "rho_s": NaN,
+      "a0_toy_units": NaN
+    }
+  ],
+  "residual_positive_fraction": 1.0,
+  "residual_coherence_Rg": 1.0,
+  "outer_bias_Rg": 38.88515865158632,
+  "mean_mass_discrepancy_D": 5.581090117622583,
+  "median_mass_discrepancy_D": 5.782181210415098,
+  "mean_residual_mass_Msun": 1219410813.0798676,
+  "outer_mean_residual_mass_Msun": 1889033616.6067183
+}

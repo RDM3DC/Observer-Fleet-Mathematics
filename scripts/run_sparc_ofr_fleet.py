@@ -1,430 +1,604 @@
+#!/usr/bin/env python3
 """
-run_sparc_ofr_fleet.py  –  OFR-Gravity SPARC Real-Data Analysis
-================================================================
-Fits baryon-only, OFR direct residual, pISO, NFW, Burkert, and MOND
-models to SPARC rotation curves.
+SPARC OFR-Gravity Fleet Runner
 
-Data source: Lelli et al. 2016, AJ 152, 157
-  (individual *_rotmod.dat files from the SPARC database)
+Runs real SPARC galaxy rotation-curve data through the OFR-Gravity witness fleet.
 
-Columns in *_rotmod.dat (header lines start with #):
-  Rad(kpc)  Vobs(km/s)  errV(km/s)  Vgas(km/s)  Vdisk(km/s)  Vbul(km/s)
-  SBdisk(L/pc^2)  SBbul(L/pc^2)
+Data source:
+https://astroweb.case.edu/SPARC/MassModels_Lelli2016c.mrt
+
+Core equations:
+
+Vbar^2 = |Vgas|Vgas + ups_disk Vdisk^2 + ups_bulge Vbul^2
+
+R_g(r) = Vobs(r)^2/r - Vbar(r)^2/r
+
+M_F(r) = r Vobs(r)^2/G - r Vbar(r)^2/G
+
+Witnesses:
+- baryon-only
+- OFR direct residual
+- pISO halo
+- NFW halo
+- Burkert halo
+- MOND-like control
 """
 
 from __future__ import annotations
 
 import argparse
-import math
-import os
-import sys
-from dataclasses import dataclass, field
-from typing import Callable
+import json
+from pathlib import Path
+import ssl
+import urllib.request
 
 import numpy as np
-from scipy.optimize import minimize_scalar, minimize
+import pandas as pd
+
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 
 
-# ── Physical constants ──────────────────────────────────────────────────────
-G_kpc = 4.302e-6           # kpc (km/s)^2 / M_sun   (Newton's constant)
-G_A0 = 1.2e-10             # m s^-2  (MOND acceleration scale)
-# Convert G_A0 to (km/s)^2 kpc^-1 :  1 (km/s)^2/kpc = 3.241e-14 m/s^2
-A0_KPC = G_A0 / 3.241e-14  # ≈ 3703 (km/s)^2 kpc^-1
+G = 4.30091e-6  # kpc (km/s)^2 / Msun
 
-# Default fiducial mass-to-light ratios (3.6 µm band, Schombert & McGaugh 2014)
-UPSILON_DISK_FID = 0.50    # M_sun / L_sun at 3.6 µm, stellar disk
-UPSILON_BUL_FID  = 0.70    # M_sun / L_sun at 3.6 µm, bulge
-
-
-# ── Data loading ────────────────────────────────────────────────────────────
-@dataclass
-class GalaxyData:
-    name: str
-    distance_mpc: float
-    R: np.ndarray       # kpc
-    Vobs: np.ndarray    # km/s
-    errV: np.ndarray    # km/s
-    Vgas: np.ndarray    # km/s  (signed – can be negative for ring kinematics)
-    Vdisk: np.ndarray   # km/s  (ϒ=1 units)
-    Vbul: np.ndarray    # km/s  (ϒ=1 units)
-    SBdisk: np.ndarray  # L_sun/pc^2
-    SBbul: np.ndarray   # L_sun/pc^2
+# GitHub mirror used when primary URL is unreachable
+_MIRROR_BASE = (
+    "https://raw.githubusercontent.com/"
+    "TerraSignum/emergent-gr-anisotropic-source-dm-de-repro/"
+    "b9a4a0e1fd6440731afcc5f625ab406249237cd9/data/sparc/"
+)
+_MIRROR_ROTMOD = _MIRROR_BASE + "Rotmod_LTG/{galaxy}_rotmod.dat"
 
 
-def load_rotmod(filepath: str, galaxy_name: str) -> GalaxyData:
-    """Parse a SPARC *_rotmod.dat file."""
+# -----------------------------
+# Data loading
+# -----------------------------
+
+def _fetch(url: str, timeout: int = 90) -> bytes:
+    ctx = ssl.create_default_context()
+    req = urllib.request.Request(
+        url,
+        headers={"User-Agent": "Mozilla/5.0 OFR-Gravity-SPARC"},
+    )
+    with urllib.request.urlopen(req, context=ctx, timeout=timeout) as r:
+        return r.read()
+
+
+def download_sparc_table(out_path: Path) -> Path:
+    url = "https://astroweb.case.edu/SPARC/MassModels_Lelli2016c.mrt"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        data = _fetch(url)
+        out_path.write_bytes(data)
+        print(f"Downloaded from primary: {url}")
+    except Exception as primary_err:
+        print(f"Primary URL failed ({primary_err}); trying GitHub mirror ...")
+        mirror_mrt = _MIRROR_BASE + "SPARC_Lelli2016c.mrt"
+        data = _fetch(mirror_mrt)
+        out_path.write_bytes(data)
+        print(f"Downloaded from mirror: {mirror_mrt}")
+
+    return out_path
+
+
+def _build_combined_table(galaxy: str, out_path: Path) -> Path:
+    """
+    Fallback when neither MRT source has rotation curves for this galaxy.
+    Downloads the per-galaxy *_rotmod.dat from the GitHub mirror and
+    constructs a 10-column table that parse_sparc_mrt can read.
+    """
+    rotmod_url = _MIRROR_ROTMOD.format(galaxy=galaxy)
+    raw = _fetch(rotmod_url).decode("utf-8", errors="replace")
+
     distance = None
     rows = []
-    with open(filepath) as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            if line.startswith("#"):
-                if "Distance" in line:
-                    # e.g.  "# Distance = 4.04 Mpc"
-                    parts = line.split("=")
-                    if len(parts) >= 2:
-                        distance = float(parts[1].split()[0])
-                continue
-            vals = line.split()
-            if len(vals) >= 8:
-                rows.append([float(v) for v in vals[:8]])
+    for line in raw.splitlines():
+        s = line.strip()
+        if not s:
+            continue
+        if s.startswith("#"):
+            if "Distance" in s:
+                try:
+                    distance = float(s.split("=")[1].split()[0])
+                except (IndexError, ValueError):
+                    pass
+            continue
+        cols = s.split()
+        if len(cols) >= 8:
+            rows.append(cols[:8])
 
-    if distance is None:
-        raise ValueError(f"Could not parse distance from {filepath}")
-    if not rows:
-        raise ValueError(f"No data rows found in {filepath}")
+    if distance is None or not rows:
+        raise RuntimeError(
+            f"Could not parse rotmod for {galaxy} from {rotmod_url}"
+        )
 
-    arr = np.array(rows)
-    return GalaxyData(
-        name=galaxy_name,
-        distance_mpc=distance,
-        R=arr[:, 0],
-        Vobs=arr[:, 1],
-        errV=arr[:, 2],
-        Vgas=arr[:, 3],
-        Vdisk=arr[:, 4],
-        Vbul=arr[:, 5],
-        SBdisk=arr[:, 6],
-        SBbul=arr[:, 7],
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with out_path.open("w") as f:
+        for cols in rows:
+            f.write(f"{galaxy} {distance} " + " ".join(cols) + "\n")
+
+    print(f"Built per-galaxy table: {out_path} ({len(rows)} rows)")
+    return out_path
+
+
+def parse_sparc_mrt(path: str | Path) -> pd.DataFrame:
+    """
+    Parses a combined SPARC rotation-curve table.
+
+    Expected data rows (10 whitespace-separated columns):
+
+        Galaxy  D_Mpc  Rad_kpc  Vobs  eVobs  Vgas  Vdisk  Vbul  SBdisk  SBbul
+    """
+    path = Path(path)
+    rows = []
+
+    for raw_line in path.read_text(errors="replace").splitlines():
+        parts = raw_line.strip().split()
+
+        if len(parts) != 10:
+            continue
+
+        try:
+            rows.append({
+                "Galaxy": parts[0],
+                "D_Mpc": float(parts[1]),
+                "Rad_kpc": float(parts[2]),
+                "Vobs_kms": float(parts[3]),
+                "eVobs_kms": float(parts[4]),
+                "Vgas_kms": float(parts[5]),
+                "Vdisk_kms": float(parts[6]),
+                "Vbul_kms": float(parts[7]),
+                "SBdisk": float(parts[8]),
+                "SBbul": float(parts[9]),
+            })
+        except ValueError:
+            continue
+
+    df = pd.DataFrame(rows)
+
+    if df.empty:
+        raise RuntimeError(f"No SPARC data rows parsed from {path}")
+
+    return df
+
+
+def select_galaxy(df: pd.DataFrame, galaxy: str) -> pd.DataFrame:
+    names = df["Galaxy"].astype(str).str.strip()
+    mask = names.str.lower() == galaxy.lower()
+
+    if not mask.any():
+        available = sorted(set(names))
+        close = [
+            name for name in available
+            if galaxy.lower() in name.lower() or name.lower() in galaxy.lower()
+        ]
+
+        raise ValueError(
+            f"Galaxy {galaxy!r} not found.\n"
+            f"Close candidates: {close[:20]}\n"
+            f"First available names: {available[:30]}"
+        )
+
+    return df[mask].copy().sort_values("Rad_kpc")
+
+
+# -----------------------------
+# Core math
+# -----------------------------
+
+def rmse(a, b) -> float:
+    a = np.asarray(a, dtype=float)
+    b = np.asarray(b, dtype=float)
+    return float(np.sqrt(np.mean((a - b) ** 2)))
+
+
+def baryon_velocity(
+    df: pd.DataFrame,
+    ups_disk: float = 0.5,
+    ups_bulge: float = 0.7,
+) -> np.ndarray:
+    """
+    SPARC convention:
+
+    Vbar^2 = |Vgas|Vgas + ups_disk Vdisk^2 + ups_bulge Vbul^2
+    """
+    vgas = df["Vgas_kms"].to_numpy(float)
+    vdisk = df["Vdisk_kms"].to_numpy(float)
+    vbul = df["Vbul_kms"].to_numpy(float)
+
+    vbar2 = (
+        np.abs(vgas) * vgas
+        + ups_disk * vdisk ** 2
+        + ups_bulge * vbul ** 2
+    )
+
+    return np.sqrt(np.maximum(0, vbar2))
+
+
+def residual_coherence(residual: np.ndarray) -> float:
+    s = np.sign(residual)
+    s[s == 0] = 1
+
+    if len(s) <= 1:
+        return 0.0
+
+    return float(np.mean(s[:-1] == s[1:]))
+
+
+def outer_bias(radius: np.ndarray, residual: np.ndarray, split_frac: float = 0.45) -> float:
+    split = np.quantile(radius, split_frac)
+    inner = residual[radius < split]
+    outer = residual[radius >= split]
+
+    return float(np.mean(outer) - np.mean(inner))
+
+
+# -----------------------------
+# Halo witnesses
+# -----------------------------
+
+def piso_velocity(r, rho0, rc):
+    """
+    Pseudo-isothermal halo.
+
+    V^2 = 4piG rho0 rc^2 [1 - rc/r atan(r/rc)]
+    """
+    r = np.asarray(r, dtype=float)
+
+    return np.sqrt(
+        np.maximum(
+            0,
+            4 * np.pi * G * rho0 * rc ** 2
+            * (1 - (rc / r) * np.arctan(r / rc)),
+        )
     )
 
 
-# ── Baryonic velocity ────────────────────────────────────────────────────────
-def vbar(gd: GalaxyData,
-         upsilon_disk: float = UPSILON_DISK_FID,
-         upsilon_bul: float = UPSILON_BUL_FID) -> np.ndarray:
+def nfw_mass(r, rho_s, r_s):
+    r = np.asarray(r, dtype=float)
+    x = np.maximum(r / r_s, 1e-12)
+
+    return 4 * np.pi * rho_s * r_s ** 3 * (
+        np.log(1 + x) - x / (1 + x)
+    )
+
+
+def nfw_velocity(r, rho_s, r_s):
+    return np.sqrt(np.maximum(0, G * nfw_mass(r, rho_s, r_s) / r))
+
+
+def burkert_mass(r, rho0, r0):
+    r = np.asarray(r, dtype=float)
+    x = np.maximum(r / r0, 1e-12)
+
+    bracket = np.log((1 + x) ** 2 * (1 + x * x)) - 2 * np.arctan(x)
+
+    return np.pi * rho0 * r0 ** 3 * bracket
+
+
+def burkert_velocity(r, rho0, r0):
+    return np.sqrt(np.maximum(0, G * burkert_mass(r, rho0, r0) / r))
+
+
+def mond_like_velocity(vbar, r, a0):
     """
-    Total baryonic circular velocity (km/s).
-    SPARC convention: gas contribution is signed (Vgas * |Vgas|) to allow
-    negative gas rings; disk/bulge always additive.
+    Simple MOND-like interpolation control.
+
+    This is not a full MOND paper-grade fit.
+    It is a witness/control model.
     """
-    vbar_sq = (np.sign(gd.Vgas) * gd.Vgas**2
-               + upsilon_disk * gd.Vdisk**2
-               + upsilon_bul  * gd.Vbul**2)
-    # Clamp numerical noise: V_bar^2 must be ≥ 0
-    vbar_sq = np.maximum(vbar_sq, 0.0)
-    return np.sqrt(vbar_sq)
+    vbar = np.asarray(vbar, dtype=float)
+    r = np.asarray(r, dtype=float)
+
+    gN = vbar * vbar / r
+    g = 0.5 * (gN + np.sqrt(gN * gN + 4 * gN * a0))
+
+    return np.sqrt(g * r)
 
 
-# ── Dark-matter halo profiles ────────────────────────────────────────────────
-def vdm_pISO(R: np.ndarray, rho0: float, rc: float) -> np.ndarray:
-    """Pseudo-isothermal halo circular speed (km/s)."""
-    v2 = 4.0 * math.pi * G_kpc * rho0 * rc**2 * (1.0 - (rc / R) * np.arctan(R / rc))
-    return np.sqrt(np.maximum(v2, 0.0))
+# -----------------------------
+# Fit witnesses
+# -----------------------------
+
+def fit_grid_halo(
+    r,
+    vobs,
+    vbar,
+    model_name,
+    velocity_fn,
+    density_grid,
+    scale_grid,
+    density_key,
+):
+    best = None
+
+    for density in density_grid:
+        for scale in scale_grid:
+            vh = velocity_fn(r, density, scale)
+            pred = np.sqrt(np.maximum(0, vbar * vbar + vh * vh))
+            e = rmse(vobs, pred)
+
+            if best is None or e < best["rmse"]:
+                best = {
+                    "model": model_name,
+                    "rmse": e,
+                    density_key: float(density),
+                    "scale_radius_kpc": float(scale),
+                    "v_model": pred,
+                    "v_halo": vh,
+                }
+
+    return best
 
 
-def vdm_NFW(R: np.ndarray, rho_s: float, r_s: float) -> np.ndarray:
-    """NFW halo circular speed (km/s)."""
-    x = R / r_s
-    # V^2 = 4πG ρ_s r_s^3 / r * [ln(1+x) - x/(1+x)]
-    v2 = (4.0 * math.pi * G_kpc * rho_s * r_s**3 / R
-          * (np.log(1.0 + x) - x / (1.0 + x)))
-    return np.sqrt(np.maximum(v2, 0.0))
+def fit_piso(r, vobs, vbar):
+    return fit_grid_halo(
+        r,
+        vobs,
+        vbar,
+        "pISO",
+        piso_velocity,
+        np.logspace(5.5, 10.5, 110),
+        np.linspace(0.1, 50.0, 150),
+        "rho0",
+    )
 
 
-def vdm_Burkert(R: np.ndarray, rho0: float, r_s: float) -> np.ndarray:
-    """
-    Burkert (1995) halo circular speed (km/s).
-    M(<r) = π ρ0 r_s^3 [2 ln(1+r/r_s) + ln(1+(r/r_s)^2) - 2 arctan(r/r_s)]
-    """
-    x = R / r_s
-    mass = (math.pi * rho0 * r_s**3
-            * (2.0 * np.log(1.0 + x)
-               + np.log(1.0 + x**2)
-               - 2.0 * np.arctan(x)))
-    v2 = G_kpc * mass / R
-    return np.sqrt(np.maximum(v2, 0.0))
+def fit_nfw(r, vobs, vbar):
+    return fit_grid_halo(
+        r,
+        vobs,
+        vbar,
+        "NFW",
+        nfw_velocity,
+        np.logspace(5.5, 10.8, 120),
+        np.linspace(0.2, 80.0, 160),
+        "rho_s",
+    )
 
 
-def vtot(Vbar: np.ndarray, Vdm: np.ndarray) -> np.ndarray:
-    """Quadrature sum of baryon and dark-matter velocities."""
-    return np.sqrt(Vbar**2 + Vdm**2)
+def fit_burkert(r, vobs, vbar):
+    return fit_grid_halo(
+        r,
+        vobs,
+        vbar,
+        "Burkert",
+        burkert_velocity,
+        np.logspace(5.5, 10.8, 120),
+        np.linspace(0.1, 80.0, 160),
+        "rho0",
+    )
 
 
-# ── MOND (McGaugh et al. 2016 Radial Acceleration Relation) ─────────────────
-def vmond(gd: GalaxyData,
-          upsilon_disk: float = UPSILON_DISK_FID,
-          upsilon_bul: float = UPSILON_BUL_FID) -> np.ndarray:
-    """
-    MOND prediction using the empirical RAR interpolation function
-      g_obs = g_bar / (1 – exp(–√(g_bar / g†)))
-    where g† = 1.2×10^{-10} m s^{-2} ≈ 3703 (km/s)^2 kpc^{-1}.
-    """
-    Vb = vbar(gd, upsilon_disk, upsilon_bul)
-    g_bar = Vb**2 / np.maximum(gd.R, 1e-6)   # (km/s)^2 / kpc
-    xi = np.sqrt(np.maximum(g_bar / A0_KPC, 1e-30))
-    nu = 1.0 / (1.0 - np.exp(-xi))
-    g_obs = g_bar * nu
-    v2 = g_obs * gd.R
-    return np.sqrt(np.maximum(v2, 0.0))
+def fit_mond(r, vobs, vbar):
+    best = None
+
+    for a0 in np.linspace(1, 10000, 420):
+        pred = mond_like_velocity(vbar, r, a0)
+        e = rmse(vobs, pred)
+
+        if best is None or e < best["rmse"]:
+            best = {
+                "model": "MOND_like",
+                "rmse": e,
+                "a0_toy_units": float(a0),
+                "v_model": pred,
+            }
+
+    return best
 
 
-# ── RMSE ────────────────────────────────────────────────────────────────────
-def rmse(Vmodel: np.ndarray, Vobs: np.ndarray,
-         weights: np.ndarray | None = None) -> float:
-    """Root-mean-square error (error-weighted if weights given)."""
-    resid = Vmodel - Vobs
-    if weights is not None:
-        return float(np.sqrt(np.average(resid**2, weights=weights)))
-    return float(np.sqrt(np.mean(resid**2)))
+# -----------------------------
+# Run one galaxy
+# -----------------------------
 
+def run_galaxy(
+    galaxy_df: pd.DataFrame,
+    output: Path,
+    galaxy: str,
+    ups_disk: float,
+    ups_bulge: float,
+) -> dict:
+    output.mkdir(parents=True, exist_ok=True)
 
-def chi2_red(Vmodel: np.ndarray, gd: GalaxyData, n_free: int) -> float:
-    resid = Vmodel - gd.Vobs
-    n = len(resid)
-    dof = max(n - n_free, 1)
-    return float(np.sum((resid / gd.errV) ** 2) / dof)
+    r = galaxy_df["Rad_kpc"].to_numpy(float)
+    vobs = galaxy_df["Vobs_kms"].to_numpy(float)
+    evobs = galaxy_df["eVobs_kms"].to_numpy(float)
 
+    vbar = baryon_velocity(galaxy_df, ups_disk, ups_bulge)
 
-# ── Model fitters ────────────────────────────────────────────────────────────
-def fit_baryon_only(gd: GalaxyData) -> dict:
-    """Baryon-only with fiducial ϒ (0 free params beyond data)."""
-    Vb = vbar(gd)
-    r = rmse(Vb, gd.Vobs)
-    c2 = chi2_red(Vb, gd, n_free=0)
-    return {"label": "Baryon-only (ϒ=0.5, 0.7)", "Vmod": Vb,
-            "rmse": r, "chi2r": c2, "n_free": 0, "params": {}}
+    mdyn = r * vobs * vobs / G
+    mvis = r * vbar * vbar / G
+    mf = mdyn - mvis
 
+    rg = vobs * vobs / r - vbar * vbar / r
+    discrepancy = vobs * vobs / np.maximum(vbar * vbar, 1e-12)
 
-def fit_ofr_direct(gd: GalaxyData) -> dict:
-    """
-    OFR direct residual: baryonic model with a single global mass-to-light
-    ratio ϒ_disk (the only free parameter).  Represents the best a purely
-    baryonic hypothesis can do when allowed to tune its normalization.
-    """
-    def objective(log_up):
-        u = math.exp(log_up)
-        Vb = vbar(gd, upsilon_disk=u, upsilon_bul=u * 1.4)
-        return rmse(Vb, gd.Vobs)
-
-    res = minimize_scalar(objective, bounds=(-3, 3), method="bounded")
-    up_opt = math.exp(res.x)
-    up_bul = up_opt * 1.4
-    Vb = vbar(gd, upsilon_disk=up_opt, upsilon_bul=up_bul)
-    r = rmse(Vb, gd.Vobs)
-    c2 = chi2_red(Vb, gd, n_free=1)
-    return {"label": "OFR direct (ϒ_opt, 1 free param)", "Vmod": Vb,
-            "rmse": r, "chi2r": c2, "n_free": 1,
-            "params": {"ϒ_disk": round(up_opt, 3), "ϒ_bul": round(up_bul, 3)}}
-
-
-def _fit_halo(gd: GalaxyData, halo_fn: Callable,
-              label: str, p0: list[float]) -> dict:
-    """Generic halo + baryon fitter (3 free params: ϒ + 2 halo)."""
-    Vb_fid = vbar(gd)
-
-    def objective(params):
-        log_up, log_p1, log_p2 = params
-        up = math.exp(log_up)
-        p1 = math.exp(log_p1)
-        p2 = math.exp(log_p2)
-        Vb  = vbar(gd, upsilon_disk=up, upsilon_bul=up * 1.4)
-        Vdm = halo_fn(gd.R, p1, p2)
-        Vm  = vtot(Vb, Vdm)
-        return rmse(Vm, gd.Vobs)
-
-    x0 = [math.log(v) for v in p0]
-    bounds = [(-3, 3), (-5, 20), (-3, 10)]
-    res = minimize(objective, x0, method="L-BFGS-B", bounds=bounds,
-                   options={"ftol": 1e-12, "maxiter": 5000})
-    up, p1, p2 = (math.exp(v) for v in res.x)
-    Vb  = vbar(gd, upsilon_disk=up, upsilon_bul=up * 1.4)
-    Vdm = halo_fn(gd.R, p1, p2)
-    Vm  = vtot(Vb, Vdm)
-    r   = rmse(Vm, gd.Vobs)
-    c2  = chi2_red(Vm, gd, n_free=3)
-    return {"label": label, "Vmod": Vm, "rmse": r, "chi2r": c2, "n_free": 3,
-            "params": {"ϒ_disk": round(up, 3),
-                       "p1": round(p1, 4), "p2": round(p2, 4)}}
-
-
-def fit_pISO(gd: GalaxyData) -> dict:
-    return _fit_halo(gd, vdm_pISO, "pISO halo",
-                     [0.5, 1e7, 2.0])   # ϒ, rho0 [M_sun/kpc^3], rc [kpc]
-
-
-def fit_NFW(gd: GalaxyData) -> dict:
-    return _fit_halo(gd, vdm_NFW, "NFW halo",
-                     [0.5, 1e7, 5.0])
-
-
-def fit_Burkert(gd: GalaxyData) -> dict:
-    return _fit_halo(gd, vdm_Burkert, "Burkert halo",
-                     [0.5, 1e7, 3.0])
-
-
-def fit_MOND(gd: GalaxyData) -> dict:
-    """MOND with fiducial ϒ (0 free params) using McGaugh+2016 RAR."""
-    Vm = vmond(gd)
-    r  = rmse(Vm, gd.Vobs)
-    c2 = chi2_red(Vm, gd, n_free=0)
-    return {"label": "MOND (RAR, g†=1.2e-10, ϒ=0.5)", "Vmod": Vm,
-            "rmse": r, "chi2r": c2, "n_free": 0, "params": {}}
-
-
-# ── Derived statistics ───────────────────────────────────────────────────────
-def mass_discrepancy_stats(gd: GalaxyData,
-                           upsilon_disk: float = UPSILON_DISK_FID,
-                           upsilon_bul: float = UPSILON_BUL_FID) -> dict:
-    """D = Vobs^2 / Vbar^2 (mass discrepancy)."""
-    Vb = vbar(gd, upsilon_disk, upsilon_bul)
-    # Avoid division by zero for very small baryonic velocities
-    Vb_safe = np.maximum(Vb, 0.1)
-    D = gd.Vobs**2 / Vb_safe**2
-    return {"D_mean": float(np.mean(D)),
-            "D_median": float(np.median(D)),
-            "D_min": float(np.min(D)),
-            "D_max": float(np.max(D))}
-
-
-def residual_positive_fraction(gd: GalaxyData,
-                                upsilon_disk: float = UPSILON_DISK_FID,
-                                upsilon_bul: float = UPSILON_BUL_FID) -> float:
-    """Fraction of points where Vobs > Vbar (residual > 0)."""
-    Vb = vbar(gd, upsilon_disk, upsilon_bul)
-    return float(np.mean(gd.Vobs > Vb))
-
-
-def residual_survives_ml_uncertainty(gd: GalaxyData,
-                                      delta_upsilon: float = 0.2) -> dict:
-    """
-    Does the Vobs > Vbar residual survive reasonable ϒ uncertainty?
-    Tests ϒ_disk in range [0.5-δ, 0.5+δ].
-    Returns whether the positive-residual fraction stays high even at
-    the maximum baryonic ϒ.
-    """
-    up_max = UPSILON_DISK_FID + delta_upsilon
-    Vb_max = vbar(gd, up_max, up_max * 1.4)
-    frac_max = float(np.mean(gd.Vobs > Vb_max))
-    # Does Vobs exceed Vbar_max at most points?
-    survives = frac_max > 0.7
-    return {"upsilon_max_tested": round(up_max, 2),
-            "pos_fraction_at_max_ϒ": round(frac_max, 3),
-            "residual_survives": survives}
-
-
-# ── Pretty printing ──────────────────────────────────────────────────────────
-LINE = "─" * 72
-
-def print_galaxy_report(gd: GalaxyData, fits: list[dict],
-                         output_dir: str | None = None) -> None:
-    lines: list[str] = []
-
-    def p(*args):
-        s = " ".join(str(a) for a in args)
-        lines.append(s)
-        print(s)
-
-    p(LINE)
-    p(f"  GALAXY: {gd.name}")
-    p(LINE)
-    p(f"  Distance        : {gd.distance_mpc:.2f} Mpc")
-    p(f"  Data rows used  : {len(gd.R)}")
-    p(f"  Radius range    : {gd.R.min():.2f} – {gd.R.max():.2f} kpc")
-    p()
-
-    # RMSE table
-    p("  ┌──────────────────────────────────────────┬──────────┬──────────┐")
-    p("  │  Model                                   │ RMSE     │  χ²_red  │")
-    p("  ├──────────────────────────────────────────┼──────────┼──────────┤")
-    for fit in fits:
-        p(f"  │  {fit['label']:<40s} │ {fit['rmse']:>8.3f} │ {fit['chi2r']:>8.3f} │")
-    p("  └──────────────────────────────────────────┴──────────┴──────────┘")
-    p()
-
-    # Best non-OFR model
-    non_ofr = [f for f in fits if "OFR" not in f["label"] and "Baryon" not in f["label"]]
-    if non_ofr:
-        best = min(non_ofr, key=lambda f: f["rmse"])
-        p(f"  Best non-OFR model  : {best['label']}  (RMSE = {best['rmse']:.3f} km/s)")
-    p()
-
-    # Residual stats with fiducial ϒ
-    Vb_fid = vbar(gd)
-    residuals = gd.Vobs - Vb_fid
-    pos_frac  = residual_positive_fraction(gd)
-    D_stats   = mass_discrepancy_stats(gd)
-    ml_test   = residual_survives_ml_uncertainty(gd)
-
-    p(f"  Residual positive fraction (Vobs > Vbar)  : {pos_frac:.3f}")
-    p()
-    p(f"  Mass discrepancy  D = Vobs² / Vbar²")
-    p(f"    Mean            : {D_stats['D_mean']:.3f}")
-    p(f"    Median          : {D_stats['D_median']:.3f}")
-    p(f"    Range           : {D_stats['D_min']:.3f} – {D_stats['D_max']:.3f}")
-    p()
-    p(f"  ϒ uncertainty test  (ϒ_disk up to {ml_test['upsilon_max_tested']})")
-    p(f"    Positive-residual fraction at max ϒ  : {ml_test['pos_fraction_at_max_ϒ']:.3f}")
-    p(f"    Residual survives?                   : {ml_test['residual_survives']}")
-    p()
-
-    # Fitted params for halo models
-    p("  Best-fit parameters:")
-    for fit in fits:
-        if fit["params"]:
-            pstr = "  ".join(f"{k}={v}" for k, v in fit["params"].items())
-            p(f"    {fit['label']}: {pstr}")
-    p()
-
-    if output_dir:
-        os.makedirs(output_dir, exist_ok=True)
-        out_path = os.path.join(output_dir, f"{gd.name}_report.txt")
-        with open(out_path, "w") as f:
-            f.write("\n".join(lines) + "\n")
-        # Also save CSV of model velocities
-        csv_path = os.path.join(output_dir, f"{gd.name}_models.csv")
-        headers = ["R_kpc", "Vobs", "errV", "Vbar_fid"] + [fit["label"][:20].replace(" ", "_")
-                                                               for fit in fits]
-        csv_lines = [",".join(headers)]
-        for i in range(len(gd.R)):
-            row = [f"{gd.R[i]:.4f}", f"{gd.Vobs[i]:.4f}", f"{gd.errV[i]:.4f}",
-                   f"{Vb_fid[i]:.4f}"]
-            row += [f"{fit['Vmod'][i]:.4f}" for fit in fits]
-            csv_lines.append(",".join(row))
-        with open(csv_path, "w") as f:
-            f.write("\n".join(csv_lines) + "\n")
-        print(f"  [saved] {out_path}")
-        print(f"  [saved] {csv_path}")
-
-
-# ── Main ─────────────────────────────────────────────────────────────────────
-def run_galaxy(dat_path: str, galaxy_name: str, output_dir: str | None) -> None:
-    print(f"\nLoading {galaxy_name} from {dat_path}")
-    gd = load_rotmod(dat_path, galaxy_name)
+    v_ofr = np.sqrt(np.maximum(0, G * (mvis + np.maximum(0, mf)) / r))
 
     fits = [
-        fit_baryon_only(gd),
-        fit_ofr_direct(gd),
-        fit_pISO(gd),
-        fit_NFW(gd),
-        fit_Burkert(gd),
-        fit_MOND(gd),
+        {
+            "model": "baryon_only",
+            "rmse": rmse(vobs, vbar),
+            "v_model": vbar,
+        },
+        {
+            "model": "OFR_direct_residual",
+            "rmse": rmse(vobs, v_ofr),
+            "v_model": v_ofr,
+        },
+        fit_piso(r, vobs, vbar),
+        fit_nfw(r, vobs, vbar),
+        fit_burkert(r, vobs, vbar),
+        fit_mond(r, vobs, vbar),
     ]
-    print_galaxy_report(gd, fits, output_dir)
+
+    galaxy_slug = galaxy.replace(" ", "_")
+
+    # Save SPARC rows
+    galaxy_df.to_csv(output / f"{galaxy_slug}_sparc_rows.csv", index=False)
+
+    # Save residual table
+    residuals = galaxy_df.copy()
+    residuals["Vbar_kms"] = vbar
+    residuals["M_dyn_Msun"] = mdyn
+    residuals["M_visible_Msun"] = mvis
+    residuals["M_F_residual_Msun"] = mf
+    residuals["M_F_residual_clamped_Msun"] = np.maximum(0, mf)
+    residuals["R_g_kms2_per_kpc"] = rg
+    residuals["mass_discrepancy_D"] = discrepancy
+
+    for fit in fits:
+        safe_name = fit["model"].replace("-", "_")
+        residuals[f"V_{safe_name}_kms"] = fit["v_model"]
+
+    residuals.to_csv(output / f"{galaxy_slug}_ofr_fleet_residuals.csv", index=False)
+
+    # Model comparison table
+    model_rows = []
+
+    for fit in fits:
+        row = {
+            "model": fit["model"],
+            "rmse_km_s": fit["rmse"],
+        }
+
+        for key in ["rho0", "rho_s", "scale_radius_kpc", "a0_toy_units"]:
+            if key in fit:
+                row[key] = fit[key]
+
+        model_rows.append(row)
+
+    model_df = pd.DataFrame(model_rows).sort_values("rmse_km_s")
+    model_df.to_csv(output / f"{galaxy_slug}_model_witness_comparison.csv", index=False)
+
+    non_ofr = model_df[model_df["model"] != "OFR_direct_residual"]
+
+    summary = {
+        "galaxy": galaxy,
+        "rows_used": int(len(galaxy_df)),
+        "radius_min_kpc": float(r.min()),
+        "radius_max_kpc": float(r.max()),
+        "ups_disk": ups_disk,
+        "ups_bulge": ups_bulge,
+        "best_non_OFR_model": non_ofr.iloc[0].to_dict(),
+        "model_comparison": model_df.to_dict(orient="records"),
+        "residual_positive_fraction": float(np.mean(mf > 0)),
+        "residual_coherence_Rg": residual_coherence(rg),
+        "outer_bias_Rg": outer_bias(r, rg),
+        "mean_mass_discrepancy_D": float(np.mean(discrepancy)),
+        "median_mass_discrepancy_D": float(np.median(discrepancy)),
+        "mean_residual_mass_Msun": float(np.mean(np.maximum(0, mf))),
+        "outer_mean_residual_mass_Msun": float(
+            np.mean(np.maximum(0, mf)[r >= np.quantile(r, 0.45)])
+        ),
+    }
+
+    summary_path = output / f"{galaxy_slug}_ofr_fleet_summary.json"
+    summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+
+    # Plots
+    plt.figure(figsize=(10, 6))
+    plt.errorbar(r, vobs, yerr=evobs, fmt="o", markersize=4, label="observed SPARC")
+
+    for fit in fits:
+        plt.plot(r, fit["v_model"], label=fit["model"])
+
+    plt.xlabel("radius, kpc")
+    plt.ylabel("velocity, km/s")
+    plt.title(f"OFR witness fleet: {galaxy}")
+    plt.legend(fontsize=8)
+    plt.tight_layout()
+    plt.savefig(output / f"{galaxy_slug}_model_witness_fits.png", dpi=180)
+    plt.close()
+
+    plt.figure(figsize=(9, 5))
+    plt.bar(model_df["model"], model_df["rmse_km_s"])
+    plt.ylabel("RMSE, km/s")
+    plt.title(f"Witness RMSE comparison: {galaxy}")
+    plt.xticks(rotation=25, ha="right")
+    plt.tight_layout()
+    plt.savefig(output / f"{galaxy_slug}_model_witness_rmse.png", dpi=180)
+    plt.close()
+
+    plt.figure(figsize=(9, 5))
+    plt.plot(r, np.maximum(0, mf) / 1e10, marker="o", label="OFR residual mass")
+    plt.xlabel("radius, kpc")
+    plt.ylabel("residual mass, 1e10 Msun")
+    plt.title(f"OFR residual mass profile: {galaxy}")
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(output / f"{galaxy_slug}_ofr_residual_mass.png", dpi=180)
+    plt.close()
+
+    plt.figure(figsize=(9, 5))
+    plt.plot(r, rg, marker="o", label="R_g")
+    plt.axhline(0, linewidth=1)
+    plt.xlabel("radius, kpc")
+    plt.ylabel("residual acceleration, km^2/s^2/kpc")
+    plt.title(f"OFR residual field: {galaxy}")
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(output / f"{galaxy_slug}_ofr_residual_field.png", dpi=180)
+    plt.close()
+
+    print(json.dumps(summary, indent=2))
+
+    return summary
 
 
-def main():
-    parser = argparse.ArgumentParser(description="OFR-Gravity SPARC Fleet Runner")
-    parser.add_argument("--galaxy", required=True,
-                        help="Galaxy name (e.g. DDO154)")
-    parser.add_argument("--data-dir", default="/tmp",
-                        help="Directory containing *_rotmod.dat files")
-    parser.add_argument("--output", default=None,
-                        help="Output directory for reports/CSVs")
+# -----------------------------
+# CLI
+# -----------------------------
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument("--galaxy", default="DDO154")
+    parser.add_argument("--table", default="")
+    parser.add_argument("--output", default="")
+    parser.add_argument("--ups-disk", type=float, default=0.5)
+    parser.add_argument("--ups-bulge", type=float, default=0.7)
+
     args = parser.parse_args()
 
-    dat_path = os.path.join(args.data_dir, f"{args.galaxy}_rotmod.dat")
-    if not os.path.exists(dat_path):
-        print(f"ERROR: {dat_path} not found.")
-        print("Available *_rotmod.dat files in data-dir:")
-        for fn in sorted(os.listdir(args.data_dir)):
-            if fn.endswith("_rotmod.dat"):
-                print(f"  {fn[:-11]}")
-        sys.exit(1)
+    output = Path(args.output or f"runs/{args.galaxy}")
+    output.mkdir(parents=True, exist_ok=True)
 
-    run_galaxy(dat_path, args.galaxy, args.output)
+    if args.table:
+        table_path = Path(args.table)
+    else:
+        table_path = Path("data/MassModels_Lelli2016c.mrt")
+
+        if not table_path.exists():
+            print("Downloading SPARC table...")
+            download_sparc_table(table_path)
+
+    df = parse_sparc_mrt(table_path)
+
+    # If galaxy not found in combined file, fetch from per-galaxy mirror
+    names = df["Galaxy"].astype(str).str.strip().str.lower()
+    if not (names == args.galaxy.lower()).any():
+        print(
+            f"Galaxy {args.galaxy!r} not in {table_path}; "
+            "fetching per-galaxy rotmod from mirror ..."
+        )
+        per_galaxy_path = Path(f"data/sparc/{args.galaxy}_rotmod_combined.mrt")
+        _build_combined_table(args.galaxy, per_galaxy_path)
+        df2 = parse_sparc_mrt(per_galaxy_path)
+        df = pd.concat([df, df2], ignore_index=True)
+
+    galaxy_df = select_galaxy(df, args.galaxy)
+
+    run_galaxy(
+        galaxy_df=galaxy_df,
+        output=output,
+        galaxy=args.galaxy,
+        ups_disk=args.ups_disk,
+        ups_bulge=args.ups_bulge,
+    )
 
 
 if __name__ == "__main__":
