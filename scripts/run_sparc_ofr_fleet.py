@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-SPARC OFR-Gravity Fleet Runner
+SPARC OFR-Gravity Fleet Runner  (v3)
 
 Runs real SPARC galaxy rotation-curve data through the OFR-Gravity witness fleet.
 
@@ -17,11 +17,16 @@ M_F(r) = r Vobs(r)^2/G - r Vbar(r)^2/G
 
 Witnesses:
 - baryon-only
-- OFR direct residual
+- OFR direct residual  (tautology baseline — RMSE ≈ 0)
 - pISO halo
 - NFW halo
 - Burkert halo
-- MOND-like control
+- MOND-like control  (simple interpolation)
+
+Physically motivated OFR field models (v3 additions):
+- OFR_power_law    : V_OFR²(r) = A·r^alpha  (2 free params)
+- OFR_RAR          : McGaugh 2016 RAR g_obs = g_bar/(1-exp(-√(g_bar/g†)))  (1 free param)
+- OFR_fleet        : 7-ship power-law fleet; combined via inverse-RMSE weights
 """
 
 from __future__ import annotations
@@ -391,6 +396,216 @@ def fit_mond(r, vobs, vbar):
 
 
 # -----------------------------
+# Physically motivated OFR field models
+# -----------------------------
+
+def ofr_power_law_velocity(r: np.ndarray, A: float, alpha: float) -> np.ndarray:
+    """
+    Power-law OFR field contribution:
+
+        V_OFR²(r) = A · r^alpha
+
+    A  has units (km/s)² / kpc^alpha.
+    alpha > 0 → extra gravity grows outward (dark-matter-like).
+    alpha = 0 → solid-body extra contribution.
+    alpha < 0 → centrally concentrated extra gravity.
+    """
+    return np.sqrt(np.maximum(0.0, A * r ** alpha))
+
+
+def fit_ofr_power_law(r: np.ndarray, vobs: np.ndarray, vbar: np.ndarray) -> dict:
+    """
+    Grid search over (A, alpha) minimising RMSE of
+
+        V_tot = sqrt(V_bar² + V_OFR²)
+
+    A is searched logarithmically so that V_OFR at the median radius spans
+    roughly 5–300 km/s regardless of alpha.
+    """
+    best: dict | None = None
+
+    for log_A in np.linspace(-3, 7, 90):
+        A = 10.0 ** log_A
+        for alpha in np.linspace(-1.0, 3.0, 90):
+            vh = ofr_power_law_velocity(r, A, alpha)
+            pred = np.sqrt(np.maximum(0.0, vbar ** 2 + vh ** 2))
+            e = rmse(vobs, pred)
+            if best is None or e < best["rmse"]:
+                best = {
+                    "model": "OFR_power_law",
+                    "rmse": e,
+                    "A_km2s2_per_kpcalpha": float(A),
+                    "alpha": float(alpha),
+                    "v_model": pred,
+                    "v_halo": vh,
+                }
+
+    return best  # type: ignore[return-value]
+
+
+def ofr_rar_velocity(vbar: np.ndarray, r: np.ndarray, g_dagger: float) -> np.ndarray:
+    """
+    McGaugh, Lelli & Schombert 2016 Radial Acceleration Relation (RAR):
+
+        g_obs = g_bar / ( 1 − exp(−√(g_bar / g†)) )
+
+    g_bar = V_bar²/r  in units of (km/s)²/kpc.
+    g† is the free acceleration scale; MOND uses g† ≈ 3 700 (km/s)²/kpc
+    (≈ 1.2 × 10⁻¹⁰ m/s² converted to these units).
+
+    Returns V_tot = sqrt(g_obs · r).
+    """
+    g_bar = vbar ** 2 / np.maximum(r, 1e-12)
+    x = np.sqrt(np.maximum(g_bar / g_dagger, 1e-30))
+    # stable for both very small and very large x
+    exp_term = np.where(x > 50.0, 0.0, np.exp(-x))
+    denom = np.maximum(1.0 - exp_term, 1e-12)
+    g_obs = g_bar / denom
+    return np.sqrt(np.maximum(0.0, g_obs * r))
+
+
+def fit_ofr_rar(r: np.ndarray, vobs: np.ndarray, vbar: np.ndarray) -> dict:
+    """
+    Fit the McGaugh 2016 RAR with g† as the single free parameter.
+
+    Search range: 30 – 300 000 (km/s)²/kpc (covers sub-MOND to hyper-MOND).
+    """
+    best: dict | None = None
+
+    for g_dagger in np.logspace(1.5, 5.5, 220):
+        pred = ofr_rar_velocity(vbar, r, g_dagger)
+        e = rmse(vobs, pred)
+        if best is None or e < best["rmse"]:
+            best = {
+                "model": "OFR_RAR",
+                "rmse": e,
+                "g_dagger_km2s2_per_kpc": float(g_dagger),
+                "v_model": pred,
+            }
+
+    return best  # type: ignore[return-value]
+
+
+def fit_ofr_fleet_ensemble(
+    r: np.ndarray, vobs: np.ndarray, vbar: np.ndarray
+) -> dict:
+    """
+    Observer Fleet ensemble: seven power-law ships with distinct, fixed alpha.
+
+    Each ship independently optimises its amplitude A.
+    The fleet prediction is the inverse-RMSE weighted mean of all ship
+    predictions — a true fleet consensus.
+
+    Ship alphas span the realistic range of dark-matter-like radial profiles.
+    """
+    alpha_fleet = [0.3, 0.7, 1.0, 1.3, 1.7, 2.0, 2.5]
+
+    ship_records = []
+    for alpha in alpha_fleet:
+        best_A: float | None = None
+        best_rmse_ship: float | None = None
+        best_pred_ship = np.zeros_like(vobs)
+
+        for log_A in np.linspace(-3, 7, 120):
+            A = 10.0 ** log_A
+            vh = ofr_power_law_velocity(r, A, alpha)
+            pred = np.sqrt(np.maximum(0.0, vbar ** 2 + vh ** 2))
+            e = rmse(vobs, pred)
+            if best_rmse_ship is None or e < best_rmse_ship:
+                best_A = A
+                best_rmse_ship = e
+                best_pred_ship = pred
+
+        ship_records.append({
+            "alpha": alpha,
+            "A": best_A,
+            "rmse": best_rmse_ship,
+            "pred": best_pred_ship,
+        })
+
+    weights = np.array([1.0 / max(s["rmse"], 0.01) for s in ship_records])  # type: ignore[arg-type]
+    weights /= weights.sum()
+
+    preds = np.column_stack([s["pred"] for s in ship_records])
+    fleet_pred = preds @ weights
+    fleet_rmse = rmse(vobs, fleet_pred)
+
+    return {
+        "model": "OFR_fleet",
+        "rmse": fleet_rmse,
+        "v_model": fleet_pred,
+        "ship_alphas": alpha_fleet,
+        "ship_rmses": [float(s["rmse"]) for s in ship_records],  # type: ignore[arg-type]
+        "fleet_weights": weights.tolist(),
+    }
+
+
+# -----------------------------
+# Text report
+# -----------------------------
+
+def save_report(
+    galaxy: str,
+    distance_mpc: float,
+    n_rows: int,
+    r_min: float,
+    r_max: float,
+    model_df: "pd.DataFrame",
+    mf: np.ndarray,
+    discrepancy: np.ndarray,
+    rg: np.ndarray,
+    r: np.ndarray,
+    fits: list,
+    output: "Path",
+) -> None:
+    lines = [
+        "─" * 72,
+        f"  GALAXY: {galaxy}",
+        "─" * 72,
+        f"  Distance        : {distance_mpc:.2f} Mpc",
+        f"  Data rows used  : {n_rows}",
+        f"  Radius range    : {r_min:.2f} – {r_max:.2f} kpc",
+        "",
+        f"  {'Model':<42} {'RMSE':>8}  {'χ²_red':>8}",
+        "  " + "─" * 62,
+    ]
+
+    sigma_obs = 2.0  # km/s default uncertainty floor
+    dof = max(1, n_rows - 1)
+
+    for _, row in model_df.iterrows():
+        m = str(row["model"])
+        r_val = float(row["rmse_km_s"])
+        chi2 = r_val ** 2 * n_rows / sigma_obs ** 2 / dof
+        lines.append(f"  {m:<42} {r_val:>8.3f}  {chi2:>8.3f}")
+
+    lines += [
+        "  " + "─" * 62,
+        "",
+        f"  Residual positive fraction (Vobs > Vbar)  : {float(np.mean(mf > 0)):.3f}",
+        "",
+        "  Mass discrepancy  D = Vobs² / Vbar²",
+        f"    Mean            : {float(np.mean(discrepancy)):.3f}",
+        f"    Median          : {float(np.median(discrepancy)):.3f}",
+        f"    Range           : {float(discrepancy.min()):.3f} – {float(discrepancy.max()):.3f}",
+        "",
+    ]
+
+    # Ship-level detail for OFR fleet
+    for fit in fits:
+        if fit["model"] == "OFR_fleet" and "ship_alphas" in fit:
+            lines.append("  OFR fleet ships (alpha → RMSE):")
+            for alpha, sr in zip(fit["ship_alphas"], fit["ship_rmses"]):
+                lines.append(f"    alpha = {alpha:.1f}  →  {sr:.3f} km/s")
+            lines.append("")
+
+    galaxy_slug = galaxy.replace(" ", "_")
+    report_path = output / f"{galaxy_slug}_report.txt"
+    report_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"Report saved: {report_path}")
+
+
+# -----------------------------
 # Run one galaxy
 # -----------------------------
 
@@ -433,6 +648,9 @@ def run_galaxy(
         fit_nfw(r, vobs, vbar),
         fit_burkert(r, vobs, vbar),
         fit_mond(r, vobs, vbar),
+        fit_ofr_power_law(r, vobs, vbar),
+        fit_ofr_rar(r, vobs, vbar),
+        fit_ofr_fleet_ensemble(r, vobs, vbar),
     ]
 
     galaxy_slug = galaxy.replace(" ", "_")
@@ -465,7 +683,10 @@ def run_galaxy(
             "rmse_km_s": fit["rmse"],
         }
 
-        for key in ["rho0", "rho_s", "scale_radius_kpc", "a0_toy_units"]:
+        for key in [
+            "rho0", "rho_s", "scale_radius_kpc", "a0_toy_units",
+            "A_km2s2_per_kpcalpha", "alpha", "g_dagger_km2s2_per_kpc",
+        ]:
             if key in fit:
                 row[key] = fit[key]
 
@@ -493,6 +714,17 @@ def run_galaxy(
         "mean_residual_mass_Msun": float(np.mean(np.maximum(0, mf))),
         "outer_mean_residual_mass_Msun": float(
             np.mean(np.maximum(0, mf)[r >= np.quantile(r, 0.45)])
+        ),
+        "ofr_fleet_ships": next(
+            (
+                {
+                    "alphas": f["ship_alphas"],
+                    "rmses_km_s": f["ship_rmses"],
+                    "weights": f["fleet_weights"],
+                }
+                for f in fits if f["model"] == "OFR_fleet"
+            ),
+            None,
         ),
     }
 
@@ -543,6 +775,21 @@ def run_galaxy(
     plt.tight_layout()
     plt.savefig(output / f"{galaxy_slug}_ofr_residual_field.png", dpi=180)
     plt.close()
+
+    save_report(
+        galaxy=galaxy,
+        distance_mpc=float(galaxy_df["D_Mpc"].iloc[0]),
+        n_rows=len(galaxy_df),
+        r_min=float(r.min()),
+        r_max=float(r.max()),
+        model_df=model_df,
+        mf=mf,
+        discrepancy=discrepancy,
+        rg=rg,
+        r=r,
+        fits=fits,
+        output=output,
+    )
 
     print(json.dumps(summary, indent=2))
 

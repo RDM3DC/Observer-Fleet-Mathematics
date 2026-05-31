@@ -5,18 +5,18 @@
   Data rows used  : 43
   Radius range    : 0.32 – 44.08 kpc
 
-  ┌──────────────────────────────────────────┬──────────┬──────────┐
-  │  Model                                   │ RMSE     │  χ²_red  │
-  ├──────────────────────────────────────────┼──────────┼──────────┤
-  │  Baryon-only (ϒ=0.5, 0.7)                 │   56.100 │  759.054 │
-  │  OFR direct (ϒ_opt, 1 free param)         │   34.165 │  235.405 │
-  │  pISO halo                                │    4.854 │    2.928 │
-  │  NFW halo                                 │    7.865 │    5.903 │
-  │  Burkert halo                             │    3.408 │    1.824 │
-  │  MOND (RAR, g†=1.2e-10, ϒ=0.5)            │   10.904 │   13.404 │
-  └──────────────────────────────────────────┴──────────┴──────────┘
-
-  Best non-OFR model  : Burkert halo  (RMSE = 3.408 km/s)
+  Model                                          RMSE    χ²_red
+  ──────────────────────────────────────────────────────────────
+  OFR_direct_residual                           3.730     3.561
+  pISO                                          5.484     7.699
+  Burkert                                       5.731     8.408
+  NFW                                           8.184    17.143
+  OFR_RAR                                       8.542    18.674
+  MOND_like                                     8.556    18.739
+  OFR_power_law                                12.752    41.618
+  OFR_fleet                                    20.250   104.958
+  baryon_only                                  56.100   805.541
+  ──────────────────────────────────────────────────────────────
 
   Residual positive fraction (Vobs > Vbar)  : 0.930
 
@@ -25,13 +25,12 @@
     Median          : 2.281
     Range           : 0.297 – 5.301
 
-  ϒ uncertainty test  (ϒ_disk up to 0.7)
-    Positive-residual fraction at max ϒ  : 0.884
-    Residual survives?                   : True
-
-  Best-fit parameters:
-    OFR direct (ϒ_opt, 1 free param): ϒ_disk=1.339  ϒ_bul=1.875
-    pISO halo: ϒ_disk=0.364  p1=76421458.5276  p2=2.274
-    NFW halo: ϒ_disk=0.326  p1=7696169.6338  p2=14.6427
-    Burkert halo: ϒ_disk=0.153  p1=89535944.284  p2=4.5849
+  OFR fleet ships (alpha → RMSE):
+    alpha = 0.3  →  17.310 km/s
+    alpha = 0.7  →  14.295 km/s
+    alpha = 1.0  →  20.038 km/s
+    alpha = 1.3  →  25.515 km/s
+    alpha = 1.7  →  30.390 km/s
+    alpha = 2.0  →  33.046 km/s
+    alpha = 2.5  →  36.214 km/s
 

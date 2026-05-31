@@ -11,7 +11,10 @@
     "rho0": 50330919.23942742,
     "scale_radius_kpc": 2.779194630872483,
     "rho_s": NaN,
-    "a0_toy_units": NaN
+    "a0_toy_units": NaN,
+    "A_km2s2_per_kpcalpha": NaN,
+    "alpha": NaN,
+    "g_dagger_km2s2_per_kpc": NaN
   },
   "model_comparison": [
     {
@@ -20,7 +23,10 @@
       "rho0": NaN,
       "scale_radius_kpc": NaN,
       "rho_s": NaN,
-      "a0_toy_units": NaN
+      "a0_toy_units": NaN,
+      "A_km2s2_per_kpcalpha": NaN,
+      "alpha": NaN,
+      "g_dagger_km2s2_per_kpc": NaN
     },
     {
       "model": "pISO",
@@ -28,7 +34,10 @@
       "rho0": 50330919.23942742,
       "scale_radius_kpc": 2.779194630872483,
       "rho_s": NaN,
-      "a0_toy_units": NaN
+      "a0_toy_units": NaN,
+      "A_km2s2_per_kpcalpha": NaN,
+      "alpha": NaN,
+      "g_dagger_km2s2_per_kpc": NaN
     },
     {
       "model": "Burkert",
@@ -36,7 +45,10 @@
       "rho0": 35378506.543531045,
       "scale_radius_kpc": 6.6327044025157225,
       "rho_s": NaN,
-      "a0_toy_units": NaN
+      "a0_toy_units": NaN,
+      "A_km2s2_per_kpcalpha": NaN,
+      "alpha": NaN,
+      "g_dagger_km2s2_per_kpc": NaN
     },
     {
       "model": "NFW",
@@ -44,7 +56,21 @@
       "rho0": NaN,
       "scale_radius_kpc": 20.777358490566037,
       "rho_s": 3706018.33010756,
-      "a0_toy_units": NaN
+      "a0_toy_units": NaN,
+      "A_km2s2_per_kpcalpha": NaN,
+      "alpha": NaN,
+      "g_dagger_km2s2_per_kpc": NaN
+    },
+    {
+      "model": "OFR_RAR",
+      "rmse_km_s": 8.541672850287963,
+      "rho0": NaN,
+      "scale_radius_kpc": NaN,
+      "rho_s": NaN,
+      "a0_toy_units": NaN,
+      "A_km2s2_per_kpcalpha": NaN,
+      "alpha": NaN,
+      "g_dagger_km2s2_per_kpc": 2846.675080111865
     },
     {
       "model": "MOND_like",
@@ -52,7 +78,32 @@
       "rho0": NaN,
       "scale_radius_kpc": NaN,
       "rho_s": NaN,
-      "a0_toy_units": 2816.947494033413
+      "a0_toy_units": 2816.947494033413,
+      "A_km2s2_per_kpcalpha": NaN,
+      "alpha": NaN,
+      "g_dagger_km2s2_per_kpc": NaN
+    },
+    {
+      "model": "OFR_power_law",
+      "rmse_km_s": 12.751522203802821,
+      "rho0": NaN,
+      "scale_radius_kpc": NaN,
+      "rho_s": NaN,
+      "a0_toy_units": NaN,
+      "A_km2s2_per_kpcalpha": 2538.016154301076,
+      "alpha": 0.5730337078651684,
+      "g_dagger_km2s2_per_kpc": NaN
+    },
+    {
+      "model": "OFR_fleet",
+      "rmse_km_s": 20.250150610236336,
+      "rho0": NaN,
+      "scale_radius_kpc": NaN,
+      "rho_s": NaN,
+      "a0_toy_units": NaN,
+      "A_km2s2_per_kpcalpha": NaN,
+      "alpha": NaN,
+      "g_dagger_km2s2_per_kpc": NaN
     },
     {
       "model": "baryon_only",
@@ -60,7 +111,10 @@
       "rho0": NaN,
       "scale_radius_kpc": NaN,
       "rho_s": NaN,
-      "a0_toy_units": NaN
+      "a0_toy_units": NaN,
+      "A_km2s2_per_kpcalpha": NaN,
+      "alpha": NaN,
+      "g_dagger_km2s2_per_kpc": NaN
     }
   ],
   "residual_positive_fraction": 0.9302325581395349,
@@ -69,5 +123,34 @@
   "mean_mass_discrepancy_D": 2.8151897936407955,
   "median_mass_discrepancy_D": 2.2810754249322396,
   "mean_residual_mass_Msun": 50959952011.17795,
-  "outer_mean_residual_mass_Msun": 87280539275.5012
+  "outer_mean_residual_mass_Msun": 87280539275.5012,
+  "ofr_fleet_ships": {
+    "alphas": [
+      0.3,
+      0.7,
+      1.0,
+      1.3,
+      1.7,
+      2.0,
+      2.5
+    ],
+    "rmses_km_s": [
+      17.309960700951216,
+      14.295051843987514,
+      20.03837271587726,
+      25.51534610065764,
+      30.38972415574769,
+      33.04644861703067,
+      36.213540048408625
+    ],
+    "weights": [
+      0.18780883398380926,
+      0.22741879994779884,
+      0.16223690324790357,
+      0.12741208850259014,
+      0.1069757500558407,
+      0.09837557957364917,
+      0.08977204468840848
+    ]
+  }
 }
