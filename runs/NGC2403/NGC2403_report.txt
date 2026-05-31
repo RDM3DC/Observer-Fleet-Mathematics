@@ -1,0 +1,36 @@
+────────────────────────────────────────────────────────────────────────
+  GALAXY: NGC2403
+────────────────────────────────────────────────────────────────────────
+  Distance        : 3.16 Mpc
+  Data rows used  : 73
+  Radius range    : 0.16 – 20.87 kpc
+
+  Model                                          RMSE    χ²_red
+  ──────────────────────────────────────────────────────────────
+  OFR_direct_residual                           0.000     0.000
+  NFW                                           3.402     2.933
+  OFR_RAR                                       4.134     4.332
+  MOND_like                                     4.273     4.628
+  OFR_power_law                                 5.254     6.996
+  pISO                                          5.782     8.475
+  Burkert                                       6.934    12.186
+  OFR_fleet                                    10.258    26.672
+  baryon_only                                  50.701   651.575
+  ──────────────────────────────────────────────────────────────
+
+  Residual positive fraction (Vobs > Vbar)  : 1.000
+
+  Mass discrepancy  D = Vobs² / Vbar²
+    Mean            : 3.177
+    Median          : 2.277
+    Range           : 1.675 – 6.847
+
+  OFR fleet ships (alpha → RMSE):
+    alpha = 0.3  →  12.138 km/s
+    alpha = 0.7  →  6.446 km/s
+    alpha = 1.0  →  12.127 km/s
+    alpha = 1.3  →  17.196 km/s
+    alpha = 1.7  →  22.031 km/s
+    alpha = 2.0  →  24.457 km/s
+    alpha = 2.5  →  27.756 km/s
+
