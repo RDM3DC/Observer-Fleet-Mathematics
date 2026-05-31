@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760">
+  <rect width="1200" height="760" fill="#ffffff"/>
+  <text x="600" y="55" text-anchor="middle" font-family="Arial, sans-serif" font-size="34" font-weight="700">Holonomy Scar Lantern</text>
+  <text x="600" y="90" text-anchor="middle" font-family="Arial, sans-serif" font-size="18">A curve whose identity is shape plus the phase-memory scar that survives Fleet-EGATL observation.</text>
+  <text x="60" y="145" font-family="Arial, sans-serif" font-size="24" font-weight="700">Fleet-EGATL stack</text>
+  <g font-family="Arial, sans-serif" font-size="18">
+    <rect x="60" y="175" width="300" height="42" rx="8" fill="#e8f1fb" stroke="#b8c7d9"/><text x="80" y="202">1. Ordinary signal</text><text x="205" y="235" text-anchor="middle" font-size="24">↓</text>
+    <rect x="60" y="250" width="300" height="42" rx="8" fill="#e8f1fb" stroke="#b8c7d9"/><text x="80" y="277">2. Hidden phase scar</text><text x="205" y="310" text-anchor="middle" font-size="24">↓</text>
+    <rect x="60" y="325" width="300" height="42" rx="8" fill="#e8f1fb" stroke="#b8c7d9"/><text x="80" y="352">3. EGATL adaptive body</text><text x="205" y="385" text-anchor="middle" font-size="24">↓</text>
+    <rect x="60" y="400" width="300" height="42" rx="8" fill="#e8f1fb" stroke="#b8c7d9"/><text x="80" y="427">4. ARP resistance</text><text x="205" y="460" text-anchor="middle" font-size="24">↓</text>
+    <rect x="60" y="475" width="300" height="42" rx="8" fill="#e8f1fb" stroke="#b8c7d9"/><text x="80" y="502">5. Phase-Lift history</text><text x="205" y="535" text-anchor="middle" font-size="24">↓</text>
+    <rect x="60" y="550" width="300" height="42" rx="8" fill="#e8f1fb" stroke="#b8c7d9"/><text x="80" y="577">6. Curve Memory word</text><text x="205" y="610" text-anchor="middle" font-size="24">↓</text>
+    <rect x="60" y="625" width="300" height="42" rx="8" fill="#e8f1fb" stroke="#b8c7d9"/><text x="80" y="652">7. Fleet vote + damage test</text>
+  </g>
+  <text x="440" y="145" font-family="Arial, sans-serif" font-size="24" font-weight="700">What it found</text>
+  <rect x="440" y="175" width="690" height="120" rx="10" fill="#f7f7f7" stroke="#d0d0d0"/>
+  <text x="465" y="210" font-family="Arial, sans-serif" font-size="20" font-weight="700">Candidate</text>
+  <text x="465" y="242" font-family="Arial, sans-serif" font-size="22">Holonomy Scar Lantern = Object-004</text>
+  <text x="465" y="274" font-family="Arial, sans-serif" font-size="18">Discovery score: 63.91</text>
+  <rect x="440" y="325" width="690" height="110" rx="10" fill="#f7f7f7" stroke="#d0d0d0"/>
+  <text x="465" y="360" font-family="Arial, sans-serif" font-size="20" font-weight="700">Plain meaning</text>
+  <text x="465" y="392" font-family="Arial, sans-serif" font-size="22">The curve remembers how it was crossed.</text>
+  <rect x="440" y="465" width="690" height="150" rx="10" fill="#f7f7f7" stroke="#d0d0d0"/>
+  <text x="465" y="500" font-family="Arial, sans-serif" font-size="20" font-weight="700">Memory word</text>
+  <text x="465" y="535" font-family="Consolas, monospace" font-size="18">S S M S H H K M R+ R+ M R- R- M D D H R+ R+ R- R- M</text>
+  <rect x="440" y="645" width="690" height="55" rx="10" fill="#fff5dc" stroke="#d8bd76"/>
+  <text x="465" y="680" font-family="Arial, sans-serif" font-size="18">Status: research scaffold, not a proof of new physics or a solved knot invariant.</text>
+</svg>
