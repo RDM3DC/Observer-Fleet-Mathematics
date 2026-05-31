@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/RDM3DC/Observer-Fleet-Mathematics/schemas/cosmic_beat_reader.schema.json",
+  "title": "Cosmic Beat Reader Input Schema",
+  "type": "object",
+  "required": ["metadata", "hz", "bao", "cmb"],
+  "properties": {
+    "metadata": {
+      "type": "object",
+      "required": ["name", "source", "units"],
+      "properties": {
+        "name": {"type": "string"},
+        "source": {"type": "string"},
+        "description": {"type": "string"},
+        "units": {
+          "type": "object",
+          "properties": {
+            "hz_x": {"type": "string", "default": "redshift z"},
+            "hz_y": {"type": "string", "default": "km/s/Mpc"},
+            "bao_x": {"type": "string", "default": "Mpc"},
+            "bao_y": {"type": "string", "default": "correlation/residual amplitude"},
+            "cmb_x": {"type": "string", "default": "multipole ell"},
+            "cmb_y": {"type": "string", "default": "C_ell or normalized C_ell"}
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "clock": {
+      "type": "object",
+      "properties": {
+        "modulus": {"type": "integer", "default": 101},
+        "a": {"type": "integer", "default": 4},
+        "b": {"type": "integer", "default": 3},
+        "seed": {
+          "type": "array",
+          "items": {"type": "integer"},
+          "minItems": 2,
+          "maxItems": 2,
+          "default": [1, 1]
+        },
+        "sample_count": {"type": "integer", "default": 256}
+      },
+      "additionalProperties": false
+    },
+    "hz": {
+      "type": "array",
+      "description": "Expansion data: H(z), model_H, and uncertainty.",
+      "items": {
+        "type": "object",
+        "required": ["z", "H"],
+        "properties": {
+          "z": {"type": "number"},
+          "H": {"type": "number"},
+          "sigma": {"type": "number"},
+          "model_H": {"type": "number"}
+        },
+        "additionalProperties": true
+      }
+    },
+    "bao": {
+      "type": "array",
+      "description": "BAO/correlation data: radius r, xi, model_xi, and uncertainty.",
+      "items": {
+        "type": "object",
+        "required": ["r", "xi"],
+        "properties": {
+          "r": {"type": "number"},
+          "xi": {"type": "number"},
+          "sigma": {"type": "number"},
+          "model_xi": {"type": "number"}
+        },
+        "additionalProperties": true
+      }
+    },
+    "cmb": {
+      "type": "array",
+      "description": "CMB-like angular spectrum: ell, C_ell, model_C_ell, and uncertainty.",
+      "items": {
+        "type": "object",
+        "required": ["ell", "cl"],
+        "properties": {
+          "ell": {"type": "number"},
+          "cl": {"type": "number"},
+          "sigma": {"type": "number"},
+          "model_cl": {"type": "number"}
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": false
+}
