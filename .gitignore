@@ -8,4 +8,5 @@ build/
 *.egg-info/
 results/*.csv
 results/*.png
+dashboards/pi_ship/assets/pi_dynamic_cache.txt
 .DS_Store

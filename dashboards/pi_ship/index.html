@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Pi Flight Deck</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Observer Fleet</p>
+          <h1>Pi Flight Deck</h1>
+        </div>
+        <div class="status-strip" aria-live="polite">
+          <span id="loadStatus" class="status-pill">Loading pi stream</span>
+          <span id="runStatus" class="status-pill muted">Docked</span>
+        </div>
+      </header>
+
+      <section class="flight-layout" aria-label="Pi flight dashboard">
+        <div class="flight-stage">
+          <div class="space-viewport">
+            <img class="ship-image" src="assets/pi-ship.png" alt="Spaceship flying through glowing digits of pi">
+            <div class="hud-overlay">
+              <div class="coordinate-readout">
+                <span class="label">Pi coordinate</span>
+                <strong id="coordinate">0.0</strong>
+              </div>
+              <div class="distance-readout">
+                <span class="label">Digits traveled</span>
+                <strong id="distance">0</strong>
+              </div>
+            </div>
+          </div>
+
+          <div class="digit-corridor" aria-label="Forty digit pi corridor">
+            <div class="corridor-header">
+              <span>40-digit flight line</span>
+              <span id="windowRange">pi[1..40]</span>
+            </div>
+            <div id="digitWindow" class="digit-window" aria-live="polite"></div>
+          </div>
+
+          <div class="controls-row" aria-label="Flight controls">
+            <button id="toggleRun" type="button" class="primary">Launch</button>
+            <button id="stepOnce" type="button">Step 1</button>
+            <button id="reverseProbe" type="button">Reverse Probe</button>
+            <button id="resetFlight" type="button">Reset</button>
+            <label class="toggle-control">
+              <input id="autoProbe" type="checkbox" checked>
+              <span>Auto probe</span>
+            </label>
+            <label class="jump-control">
+              <span>Probe every</span>
+              <input id="probeInterval" type="number" min="10" max="1000000" value="500" inputmode="numeric">
+            </label>
+            <label class="speed-control">
+              <span>Speed</span>
+              <input id="speed" type="range" min="1" max="120" value="18">
+              <output id="speedValue">18 digits/s</output>
+            </label>
+            <label class="jump-control">
+              <span>Jump to digit</span>
+              <input id="jumpTo" type="number" min="1" value="1" inputmode="numeric">
+            </label>
+            <button id="jumpButton" type="button">Go</button>
+          </div>
+        </div>
+
+        <aside class="side-stack" aria-label="Ship instruments">
+          <section class="meter-grid">
+            <article class="meter">
+              <span class="label">Current digit</span>
+              <strong id="currentDigit">-</strong>
+            </article>
+            <article class="meter">
+              <span class="label">Loaded horizon</span>
+              <strong id="loadedHorizon">-</strong>
+            </article>
+            <article class="meter">
+              <span class="label">Window entropy</span>
+              <strong id="entropyValue">-</strong>
+            </article>
+            <article class="meter">
+              <span class="label">Prime digit share</span>
+              <strong id="primeShare">-</strong>
+            </article>
+          </section>
+
+          <section class="observer-panel">
+            <div class="section-heading">
+              <h2>Observer Ships</h2>
+              <span id="classification">Idle</span>
+            </div>
+            <div class="observer-list">
+              <div class="observer-row">
+                <span>Entropy scout</span>
+                <strong id="entropyScout">-</strong>
+              </div>
+              <div class="observer-row">
+                <span>Run detector</span>
+                <strong id="runDetector">-</strong>
+              </div>
+              <div class="observer-row">
+                <span>Repeat detector</span>
+                <strong id="repeatDetector">-</strong>
+              </div>
+              <div class="observer-row">
+                <span>Mod checksum</span>
+                <strong id="modChecksum">-</strong>
+              </div>
+            </div>
+          </section>
+
+          <section class="probe-panel">
+            <div class="section-heading">
+              <h2>Reverse Probe</h2>
+              <span id="probeStatus">Waiting</span>
+            </div>
+            <div class="observer-list">
+              <div class="observer-row">
+                <span>Verified frontier</span>
+                <strong id="verifiedFrontier">pi[1]</strong>
+              </div>
+              <div class="observer-row">
+                <span>Next return span</span>
+                <strong id="probeSpan">0 digits</strong>
+              </div>
+              <div class="observer-row">
+                <span>Forward hash</span>
+                <strong id="forwardHash">-</strong>
+              </div>
+              <div class="observer-row">
+                <span>Reverse hash</span>
+                <strong id="reverseHash">-</strong>
+              </div>
+            </div>
+          </section>
+
+          <section class="discovery-panel">
+            <div class="section-heading">
+              <h2>Discovery Feed</h2>
+              <span id="discoveryCount">0 found</span>
+            </div>
+            <div id="majorBanner" class="major-banner" hidden>
+              <span>Major discovery</span>
+              <strong id="majorTitle">-</strong>
+            </div>
+            <ol id="discoveryFeed" class="discovery-feed">
+              <li class="empty-feed">Launch the ship to start scanning pi.</li>
+            </ol>
+          </section>
+        </aside>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
