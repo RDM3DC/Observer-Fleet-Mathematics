@@ -23,13 +23,14 @@
         <div class="flight-stage">
           <div class="space-viewport">
             <img class="ship-image" src="assets/pi-ship.png" alt="Spaceship flying through glowing digits of pi">
+            <canvas id="fieldCanvas" class="field-canvas" aria-hidden="true"></canvas>
             <div class="hud-overlay">
               <div class="coordinate-readout">
-                <span class="label">Pi coordinate</span>
+                <span id="coordinateLabel" class="label">Pi coordinate</span>
                 <strong id="coordinate">0.0</strong>
               </div>
               <div class="distance-readout">
-                <span class="label">Digits traveled</span>
+                <span id="distanceLabel" class="label">Digits traveled</span>
                 <strong id="distance">0</strong>
               </div>
             </div>
@@ -37,13 +38,25 @@
 
           <div class="digit-corridor" aria-label="Forty digit pi corridor">
             <div class="corridor-header">
-              <span>40-digit flight line</span>
+              <span id="corridorTitle">40-digit flight line</span>
               <span id="windowRange">pi[1..40]</span>
             </div>
             <div id="digitWindow" class="digit-window" aria-live="polite"></div>
           </div>
 
           <div class="controls-row" aria-label="Flight controls">
+            <div class="mode-control" role="group" aria-label="Flight mode">
+              <button id="digitMode" type="button" class="selected">Pi digits</button>
+              <button id="geometryMode" type="button">Geometry field</button>
+            </div>
+            <label id="fieldControl" class="jump-control field-control" hidden>
+              <span>Field</span>
+              <select id="fieldKind">
+                <option value="pi_a">pi_a adaptive</option>
+                <option value="pi_f">pi_f Fibonacci</option>
+                <option value="pi_n">pi_n non-Euclidean</option>
+              </select>
+            </label>
             <button id="toggleRun" type="button" class="primary">Launch</button>
             <button id="stepOnce" type="button">Step 1</button>
             <button id="reverseProbe" type="button">Reverse Probe</button>
@@ -62,7 +75,7 @@
               <output id="speedValue">18 digits/s</output>
             </label>
             <label class="jump-control">
-              <span>Jump to digit</span>
+              <span id="jumpLabel">Jump to digit</span>
               <input id="jumpTo" type="number" min="1" value="1" inputmode="numeric">
             </label>
             <button id="jumpButton" type="button">Go</button>
@@ -72,44 +85,77 @@
         <aside class="side-stack" aria-label="Ship instruments">
           <section class="meter-grid">
             <article class="meter">
-              <span class="label">Current digit</span>
+              <span id="meterCurrentLabel" class="label">Current digit</span>
               <strong id="currentDigit">-</strong>
             </article>
             <article class="meter">
-              <span class="label">Loaded horizon</span>
+              <span id="meterHorizonLabel" class="label">Loaded horizon</span>
               <strong id="loadedHorizon">-</strong>
             </article>
             <article class="meter">
-              <span class="label">Window entropy</span>
+              <span id="meterEntropyLabel" class="label">Window entropy</span>
               <strong id="entropyValue">-</strong>
             </article>
             <article class="meter">
-              <span class="label">Prime digit share</span>
+              <span id="meterPrimeLabel" class="label">Prime digit share</span>
               <strong id="primeShare">-</strong>
             </article>
           </section>
 
           <section class="observer-panel">
             <div class="section-heading">
-              <h2>Observer Ships</h2>
+              <h2 id="observerPanelTitle">Observer Ships</h2>
               <span id="classification">Idle</span>
             </div>
             <div class="observer-list">
               <div class="observer-row">
-                <span>Entropy scout</span>
+                <span id="observerRowOneLabel">Entropy scout</span>
                 <strong id="entropyScout">-</strong>
               </div>
               <div class="observer-row">
-                <span>Run detector</span>
+                <span id="observerRowTwoLabel">Run detector</span>
                 <strong id="runDetector">-</strong>
               </div>
               <div class="observer-row">
-                <span>Repeat detector</span>
+                <span id="observerRowThreeLabel">Repeat detector</span>
                 <strong id="repeatDetector">-</strong>
               </div>
               <div class="observer-row">
-                <span>Mod checksum</span>
+                <span id="observerRowFourLabel">Mod checksum</span>
                 <strong id="modChecksum">-</strong>
+              </div>
+            </div>
+          </section>
+
+          <section id="geometryPanel" class="geometry-panel" hidden>
+            <div class="section-heading">
+              <h2>Geometry Field</h2>
+              <span id="fieldStatus">pi_a</span>
+            </div>
+            <div class="observer-list">
+              <div class="observer-row">
+                <span>Local pi</span>
+                <strong id="localPi">-</strong>
+              </div>
+              <div class="observer-row">
+                <span>Metric scale</span>
+                <strong id="metricScale">-</strong>
+              </div>
+              <div class="observer-row">
+                <span>Curvature K</span>
+                <strong id="curvatureValue">-</strong>
+              </div>
+              <div class="observer-row">
+                <span>Adaptive arc</span>
+                <strong id="arcLength">-</strong>
+              </div>
+              <div class="observer-row">
+                <span>Winding</span>
+                <strong id="windingValue">-</strong>
+              </div>
+              <div class="observer-row">
+                <span>Parity</span>
+                <strong id="parityValue">-</strong>
               </div>
             </div>
           </section>
@@ -156,6 +202,7 @@
       </section>
     </main>
 
+    <script src="geometry.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

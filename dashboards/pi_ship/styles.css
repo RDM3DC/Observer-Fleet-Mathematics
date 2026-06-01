@@ -30,7 +30,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -67,6 +68,19 @@ input[type="number"] {
   background: #0b0d12;
   color: var(--text);
   padding: 0 10px;
+}
+
+select {
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #0b0d12;
+  color: var(--text);
+  padding: 0 10px;
+}
+
+[hidden] {
+  display: none !important;
 }
 
 .app-shell {
@@ -158,6 +172,25 @@ h2 {
   filter: saturate(1.08) contrast(1.04);
 }
 
+.field-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  transition: opacity 180ms ease;
+}
+
+body.geometry-mode .ship-image {
+  opacity: 0.26;
+  filter: saturate(0.82) contrast(1.08);
+}
+
+body.geometry-mode .field-canvas {
+  opacity: 1;
+}
+
 .space-viewport::after {
   content: "";
   position: absolute;
@@ -170,7 +203,7 @@ h2 {
 
 .hud-overlay {
   position: absolute;
-  z-index: 1;
+  z-index: 2;
   left: 16px;
   right: 16px;
   bottom: 16px;
@@ -257,6 +290,38 @@ h2 {
   color: var(--amber);
 }
 
+.digit-cell.metric-cell {
+  position: relative;
+  overflow: hidden;
+  color: #eaf9ff;
+  font-size: clamp(0.58rem, 0.92vw, 0.92rem);
+}
+
+.digit-cell.metric-cell::before {
+  content: "";
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  bottom: 3px;
+  height: calc(var(--metric-level, 0.5) * 70%);
+  border-radius: 4px 4px 2px 2px;
+  background: linear-gradient(180deg, rgba(100, 214, 255, 0.72), rgba(110, 231, 168, 0.46));
+  opacity: 0.7;
+}
+
+.digit-cell.metric-cell.metric-hot::before {
+  background: linear-gradient(180deg, rgba(243, 201, 105, 0.86), rgba(255, 122, 152, 0.54));
+}
+
+.digit-cell.metric-cell.metric-cold::before {
+  background: linear-gradient(180deg, rgba(100, 214, 255, 0.86), rgba(167, 161, 255, 0.46));
+}
+
+.digit-cell.metric-cell span {
+  position: relative;
+  z-index: 1;
+}
+
 .controls-row {
   display: flex;
   flex-wrap: wrap;
@@ -265,12 +330,40 @@ h2 {
   margin-top: 16px;
 }
 
+.mode-control {
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-height: 42px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #10141a;
+}
+
+.mode-control button {
+  min-height: 40px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0 12px;
+  white-space: nowrap;
+}
+
+.mode-control button.selected {
+  background: rgba(100, 214, 255, 0.18);
+  color: var(--cyan);
+}
+
 .speed-control,
 .jump-control {
   display: grid;
   gap: 5px;
   color: var(--muted);
   font-size: 0.8rem;
+}
+
+.field-control {
+  min-width: 178px;
 }
 
 .toggle-control {
@@ -304,6 +397,7 @@ h2 {
 .meter,
 .observer-panel,
 .probe-panel,
+.geometry-panel,
 .discovery-panel {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -323,6 +417,7 @@ h2 {
 
 .observer-panel,
 .probe-panel,
+.geometry-panel,
 .discovery-panel {
   margin-top: 16px;
   overflow: hidden;
@@ -421,6 +516,21 @@ h2 {
 .discovery-feed li.probe {
   border-left-color: var(--cyan);
   background: #12202a;
+}
+
+.discovery-feed li.curvature,
+.discovery-feed li.metric,
+.discovery-feed li.compression {
+  border-left-color: var(--amber);
+}
+
+.discovery-feed li.holonomy,
+.discovery-feed li.loop {
+  border-left-color: var(--violet);
+}
+
+.discovery-feed li.convergence {
+  border-left-color: var(--green);
 }
 
 .discovery-feed time {

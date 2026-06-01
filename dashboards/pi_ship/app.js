@@ -11,8 +11,12 @@ const FALLBACK_PI =
 
 const state = {
   pi: "",
+  piStatus: "Loading pi stream",
+  mode: "digits",
+  fieldKind: "pi_a",
   position: 0,
   traveled: 0,
+  geometryArc: 0,
   verifiedPosition: 0,
   running: false,
   streaming: false,
@@ -32,10 +36,18 @@ const state = {
 const el = {
   loadStatus: document.querySelector("#loadStatus"),
   runStatus: document.querySelector("#runStatus"),
+  fieldCanvas: document.querySelector("#fieldCanvas"),
+  coordinateLabel: document.querySelector("#coordinateLabel"),
   coordinate: document.querySelector("#coordinate"),
+  distanceLabel: document.querySelector("#distanceLabel"),
   distance: document.querySelector("#distance"),
+  corridorTitle: document.querySelector("#corridorTitle"),
   windowRange: document.querySelector("#windowRange"),
   digitWindow: document.querySelector("#digitWindow"),
+  digitMode: document.querySelector("#digitMode"),
+  geometryMode: document.querySelector("#geometryMode"),
+  fieldControl: document.querySelector("#fieldControl"),
+  fieldKind: document.querySelector("#fieldKind"),
   toggleRun: document.querySelector("#toggleRun"),
   stepOnce: document.querySelector("#stepOnce"),
   reverseProbe: document.querySelector("#reverseProbe"),
@@ -44,17 +56,35 @@ const el = {
   probeInterval: document.querySelector("#probeInterval"),
   speed: document.querySelector("#speed"),
   speedValue: document.querySelector("#speedValue"),
+  jumpLabel: document.querySelector("#jumpLabel"),
   jumpTo: document.querySelector("#jumpTo"),
   jumpButton: document.querySelector("#jumpButton"),
+  meterCurrentLabel: document.querySelector("#meterCurrentLabel"),
+  meterHorizonLabel: document.querySelector("#meterHorizonLabel"),
+  meterEntropyLabel: document.querySelector("#meterEntropyLabel"),
+  meterPrimeLabel: document.querySelector("#meterPrimeLabel"),
   currentDigit: document.querySelector("#currentDigit"),
   loadedHorizon: document.querySelector("#loadedHorizon"),
   entropyValue: document.querySelector("#entropyValue"),
   primeShare: document.querySelector("#primeShare"),
+  observerPanelTitle: document.querySelector("#observerPanelTitle"),
+  observerRowOneLabel: document.querySelector("#observerRowOneLabel"),
+  observerRowTwoLabel: document.querySelector("#observerRowTwoLabel"),
+  observerRowThreeLabel: document.querySelector("#observerRowThreeLabel"),
+  observerRowFourLabel: document.querySelector("#observerRowFourLabel"),
   classification: document.querySelector("#classification"),
   entropyScout: document.querySelector("#entropyScout"),
   runDetector: document.querySelector("#runDetector"),
   repeatDetector: document.querySelector("#repeatDetector"),
   modChecksum: document.querySelector("#modChecksum"),
+  geometryPanel: document.querySelector("#geometryPanel"),
+  fieldStatus: document.querySelector("#fieldStatus"),
+  localPi: document.querySelector("#localPi"),
+  metricScale: document.querySelector("#metricScale"),
+  curvatureValue: document.querySelector("#curvatureValue"),
+  arcLength: document.querySelector("#arcLength"),
+  windingValue: document.querySelector("#windingValue"),
+  parityValue: document.querySelector("#parityValue"),
   probeStatus: document.querySelector("#probeStatus"),
   verifiedFrontier: document.querySelector("#verifiedFrontier"),
   probeSpan: document.querySelector("#probeSpan"),
@@ -66,6 +96,10 @@ const el = {
   discoveryFeed: document.querySelector("#discoveryFeed"),
 };
 
+function isGeometryMode() {
+  return state.mode === "geometry";
+}
+
 async function loadPi() {
   try {
     const response = await fetch("/api/pi?start=0&count=6000", { cache: "no-store" });
@@ -75,7 +109,8 @@ async function loadPi() {
     const payload = await response.json();
     state.pi = String(payload.digits || "").replace(/\D/g, "");
     state.streaming = true;
-    el.loadStatus.textContent = `${Number(payload.available).toLocaleString()} pi digits available`;
+    state.piStatus = `${Number(payload.available).toLocaleString()} pi digits available`;
+    el.loadStatus.textContent = state.piStatus;
   } catch (_error) {
     try {
       const response = await fetch("assets/pi_50000.txt", { cache: "no-store" });
@@ -84,10 +119,12 @@ async function loadPi() {
       }
       const text = await response.text();
       state.pi = text.replace(/\D/g, "");
-      el.loadStatus.textContent = `${state.pi.length.toLocaleString()} static pi digits loaded`;
+      state.piStatus = `${state.pi.length.toLocaleString()} static pi digits loaded`;
+      el.loadStatus.textContent = state.piStatus;
     } catch (_fallbackError) {
       state.pi = FALLBACK_PI;
-      el.loadStatus.textContent = `${state.pi.length.toLocaleString()} fallback digits loaded`;
+      state.piStatus = `${state.pi.length.toLocaleString()} fallback digits loaded`;
+      el.loadStatus.textContent = state.piStatus;
     }
   }
 
@@ -103,7 +140,8 @@ async function ensureDigits(targetLength) {
   }
 
   state.loadingMore = true;
-  el.loadStatus.textContent = `Generating pi to ${targetLength.toLocaleString()}`;
+  state.piStatus = `Generating pi to ${targetLength.toLocaleString()}`;
+  el.loadStatus.textContent = state.piStatus;
   try {
     while (state.pi.length < targetLength) {
       const start = state.pi.length;
@@ -118,14 +156,17 @@ async function ensureDigits(targetLength) {
         throw new Error("pi API returned no digits");
       }
       state.pi += nextDigits;
-      el.loadStatus.textContent = `${state.pi.length.toLocaleString()} pi digits loaded`;
+      state.piStatus = `${state.pi.length.toLocaleString()} pi digits loaded`;
+      el.loadStatus.textContent = state.piStatus;
       el.loadedHorizon.textContent = state.pi.length.toLocaleString();
     }
-    el.loadStatus.textContent = `${state.pi.length.toLocaleString()} pi digits loaded`;
+    state.piStatus = `${state.pi.length.toLocaleString()} pi digits loaded`;
+    el.loadStatus.textContent = state.piStatus;
     el.loadedHorizon.textContent = state.pi.length.toLocaleString();
   } catch (_error) {
     state.streaming = false;
-    el.loadStatus.textContent = `${state.pi.length.toLocaleString()} pi digits loaded; stream paused`;
+    state.piStatus = `${state.pi.length.toLocaleString()} pi digits loaded; stream paused`;
+    el.loadStatus.textContent = state.piStatus;
   } finally {
     state.loadingMore = false;
     render();
@@ -165,6 +206,11 @@ function tick(timestamp) {
 }
 
 function moveBy(steps) {
+  if (isGeometryMode()) {
+    moveGeometryBy(steps);
+    return;
+  }
+
   if (!state.pi) {
     return;
   }
@@ -189,7 +235,27 @@ function moveBy(steps) {
   render();
 }
 
+function moveGeometryBy(steps) {
+  const previous = state.position;
+  const desired = Math.max(0, state.position + steps);
+  state.position = desired;
+  state.traveled += Math.max(0, state.position - previous);
+  state.geometryArc += GeometryFlight.arcBetween(previous, state.position, state.fieldKind);
+
+  for (let pos = previous + 1; pos <= state.position; pos += 1) {
+    scanAt(pos);
+  }
+
+  maybeAutoProbe();
+  render();
+}
+
 function scanAt(position) {
+  if (isGeometryMode()) {
+    scanGeometryAt(position);
+    return;
+  }
+
   const segment = windowAt(position);
   if (segment.length < WINDOW_SIZE) {
     return;
@@ -252,20 +318,27 @@ function scanAt(position) {
   }
 }
 
+function scanGeometryAt(position) {
+  const events = GeometryFlight.scan(position, state.fieldKind);
+  for (const event of events) {
+    addDiscovery(event.type, position, event.title, event.detail);
+  }
+}
+
 function addDiscovery(type, position, title, detail) {
-  const key = `${type}:${position}:${title}`;
+  const key = `${state.mode}:${state.fieldKind}:${type}:${position}:${title}`;
   if (state.seenDiscoveries.has(key)) {
     return;
   }
   state.seenDiscoveries.add(key);
-  state.discoveries.unshift({ type, position, title, detail });
+  state.discoveries.unshift({ type, position, title, detail, mode: state.mode, fieldKind: state.fieldKind });
   if (state.discoveries.length > MAX_FEED_ITEMS) {
     state.discoveries.pop();
   }
 
   const major = majorDiscoveryLevel(type, title, detail);
   if (major) {
-    state.majorDiscoveries.unshift({ type, position, title, detail, level: major });
+    state.majorDiscoveries.unshift({ type, position, title, detail, level: major, mode: state.mode, fieldKind: state.fieldKind });
     addDiscoveryToConsole(position, title, detail, major);
   }
 }
@@ -297,11 +370,33 @@ function majorDiscoveryLevel(type, title, detail) {
     const share = match ? Number(match[1]) : 0;
     return share >= 70 ? "major" : "";
   }
+  if (type === "curvature") {
+    const match = detail.match(/K=([-0-9.]+)/);
+    const curvature = match ? Math.abs(Number(match[1])) : 0;
+    return curvature >= 1.1 ? "super major" : curvature >= 0.75 ? "major" : "";
+  }
+  if (type === "metric") {
+    const match = detail.match(/Omega=([0-9.]+)/);
+    const omega = match ? Number(match[1]) : 1;
+    return omega >= 1.58 || omega <= 0.58 ? "major" : "";
+  }
+  if (type === "holonomy" || type === "loop") {
+    return "major";
+  }
+  if (type === "convergence") {
+    return "major";
+  }
+  if (type === "compression") {
+    const match = detail.match(/([0-9.]+)x/);
+    const ratio = match ? Number(match[1]) : 1;
+    return ratio >= 1.36 ? "super major" : ratio >= 1.28 ? "major" : "";
+  }
   return "";
 }
 
 function addDiscoveryToConsole(position, title, detail, level) {
-  console.info(`[${level}] pi[${position + 1}] ${title}: ${detail}`);
+  const coordinate = isGeometryMode() ? `sample[${position + 1}]` : `pi[${position + 1}]`;
+  console.info(`[${level}] ${coordinate} ${title}: ${detail}`);
 }
 
 function maybeAutoProbe() {
@@ -315,6 +410,11 @@ function maybeAutoProbe() {
 }
 
 async function runReverseProbe(options = {}) {
+  if (isGeometryMode()) {
+    runGeometryReverseProbe(options);
+    return;
+  }
+
   if (state.probing || !state.pi) {
     return;
   }
@@ -395,7 +495,109 @@ async function runReverseProbe(options = {}) {
   }
 }
 
+function runGeometryReverseProbe(options = {}) {
+  if (state.probing) {
+    return;
+  }
+
+  const end = state.position;
+  const start = Math.min(state.verifiedPosition, end);
+  const count = end - start;
+  if (count <= 0) {
+    state.lastProbe = {
+      status: "Confirmed",
+      forwardHash: "-",
+      reverseHash: "-",
+      span: 0,
+    };
+    if (!options.automatic) {
+      addDiscovery("probe", end, "Geometry probe already current", "The verified checkpoint is already at the ship.");
+    }
+    render();
+    return;
+  }
+
+  state.probing = true;
+  state.lastProbe = {
+    status: "Returning",
+    forwardHash: "...",
+    reverseHash: "...",
+    span: count,
+  };
+  render();
+
+  window.setTimeout(() => {
+    try {
+      const probe = GeometryFlight.reverseProbe(start, end, state.fieldKind);
+      state.lastProbe = {
+        status: probe.confirmed ? "Confirmed" : "Mismatch",
+        forwardHash: probe.forwardHash,
+        reverseHash: probe.reverseHash,
+        span: count,
+      };
+
+      if (probe.confirmed) {
+        state.verifiedPosition = end;
+        if (!options.automatic || count >= state.probeInterval) {
+          addDiscovery(
+            "probe",
+            end,
+            options.automatic ? "Auto geometry probe confirmed" : "Geometry reverse probe confirmed",
+            `Checked ${count.toLocaleString()} samples back to sample ${(start + 1).toLocaleString()}; arc=${probe.arcForward.toFixed(4)}, backtrack error=${probe.backtrackError.toExponential(2)}.`
+          );
+        }
+      } else {
+        state.running = false;
+        addDiscovery(
+          "probe",
+          start,
+          "Geometry reverse probe mismatch",
+          `Forward and reverse metric integration disagreed over ${count.toLocaleString()} samples.`
+        );
+      }
+    } catch (error) {
+      state.running = false;
+      state.lastProbe = {
+        status: "Error",
+        forwardHash: "-",
+        reverseHash: "-",
+        span: count,
+      };
+      addDiscovery("probe", start, "Geometry reverse probe error", error.message || "Probe failed before confirmation.");
+    } finally {
+      state.probing = false;
+      render();
+    }
+  }, 0);
+}
+
 function render() {
+  if (isGeometryMode()) {
+    renderGeometry();
+    return;
+  }
+
+  document.body.classList.remove("geometry-mode");
+  el.digitMode.classList.add("selected");
+  el.geometryMode.classList.remove("selected");
+  el.fieldControl.hidden = true;
+  el.fieldKind.value = state.fieldKind;
+  el.geometryPanel.hidden = true;
+  el.coordinateLabel.textContent = "Pi coordinate";
+  el.distanceLabel.textContent = "Digits traveled";
+  el.loadStatus.textContent = state.piStatus;
+  el.corridorTitle.textContent = "40-digit flight line";
+  el.meterCurrentLabel.textContent = "Current digit";
+  el.meterHorizonLabel.textContent = "Loaded horizon";
+  el.meterEntropyLabel.textContent = "Window entropy";
+  el.meterPrimeLabel.textContent = "Prime digit share";
+  el.observerPanelTitle.textContent = "Observer Ships";
+  el.observerRowOneLabel.textContent = "Entropy scout";
+  el.observerRowTwoLabel.textContent = "Run detector";
+  el.observerRowThreeLabel.textContent = "Repeat detector";
+  el.observerRowFourLabel.textContent = "Mod checksum";
+  el.jumpLabel.textContent = "Jump to digit";
+
   const segment = windowAt(state.position);
   renderDigits(segment);
 
@@ -432,6 +634,74 @@ function render() {
   renderFeed();
 }
 
+function renderGeometry() {
+  const profile = GeometryFlight.profile(state.position, state.fieldKind, WINDOW_SIZE);
+  const current = profile.samples[0];
+  renderGeometryWindow(profile.samples);
+  GeometryFlight.draw(el.fieldCanvas, state.position, state.fieldKind);
+
+  document.body.classList.add("geometry-mode");
+  el.digitMode.classList.remove("selected");
+  el.geometryMode.classList.add("selected");
+  el.fieldControl.hidden = false;
+  el.fieldKind.value = state.fieldKind;
+  el.geometryPanel.hidden = false;
+
+  el.coordinateLabel.textContent = "Geometry coordinate";
+  el.distanceLabel.textContent = "Samples traveled";
+  el.loadStatus.textContent = `${state.fieldKind} geometry field active`;
+  el.coordinate.textContent = `${state.fieldKind}[${(state.position + 1).toLocaleString()}]`;
+  el.distance.textContent = `${state.traveled.toLocaleString()} samples`;
+  el.corridorTitle.textContent = "40-sample metric line";
+  el.windowRange.textContent = `${state.fieldKind}[${(state.position + 1).toLocaleString()}..${(state.position + WINDOW_SIZE).toLocaleString()}]`;
+
+  el.meterCurrentLabel.textContent = "Field";
+  el.meterHorizonLabel.textContent = "Path horizon";
+  el.meterEntropyLabel.textContent = "Metric Omega";
+  el.meterPrimeLabel.textContent = "Curvature";
+  el.currentDigit.textContent = state.fieldKind;
+  el.loadedHorizon.textContent = "unbounded";
+  el.entropyValue.textContent = profile.averageOmega.toFixed(3);
+  el.primeShare.textContent = profile.dominantCurvature.toFixed(3);
+
+  el.observerPanelTitle.textContent = "Geometry Observers";
+  el.observerRowOneLabel.textContent = "Arc stretch";
+  el.observerRowTwoLabel.textContent = "Curvature scout";
+  el.observerRowThreeLabel.textContent = "Holonomy";
+  el.observerRowFourLabel.textContent = "Field compare";
+  el.entropyScout.textContent = `${profile.compression.toFixed(3)}x Euclid`;
+  el.runDetector.textContent = Math.abs(profile.dominantCurvature) > 0.64 ? "spike" : "quiet";
+  el.repeatDetector.textContent = `w=${profile.winding} / z2=${profile.parity}`;
+  el.modChecksum.textContent = `DeltaOmega ${profile.fieldSpread.toFixed(4)}`;
+  el.classification.textContent = classifyGeometry(profile);
+
+  el.fieldStatus.textContent = state.fieldKind;
+  el.localPi.textContent = current.piLocal.toFixed(5);
+  el.metricScale.textContent = `Omega ${current.omega.toFixed(3)}`;
+  el.curvatureValue.textContent = current.curvature.toFixed(3);
+  el.arcLength.textContent = state.geometryArc.toFixed(3);
+  el.windingValue.textContent = String(current.winding);
+  el.parityValue.textContent = current.parity ? "odd" : "even";
+
+  el.runStatus.textContent = state.running ? "Cruising geometry" : "Docked";
+  el.runStatus.classList.toggle("muted", !state.running);
+  el.toggleRun.textContent = state.running ? "Pause" : "Launch";
+  el.speedValue.textContent = `${state.speed} samples/s`;
+  el.jumpLabel.textContent = "Jump to sample";
+  el.jumpTo.value = String(state.position + 1);
+  el.jumpTo.max = "999999999";
+  el.reverseProbe.disabled = state.probing;
+  el.autoProbe.checked = state.autoProbe;
+  el.probeInterval.value = String(state.probeInterval);
+  el.verifiedFrontier.textContent = `sample[${(state.verifiedPosition + 1).toLocaleString()}]`;
+  el.probeSpan.textContent = `${Math.max(0, state.position - state.verifiedPosition).toLocaleString()} / ${state.probeInterval.toLocaleString()} samples`;
+  el.probeStatus.textContent = state.probing ? "Returning" : state.lastProbe?.status || "Waiting";
+  el.forwardHash.textContent = state.lastProbe?.forwardHash || "-";
+  el.reverseHash.textContent = state.lastProbe?.reverseHash || "-";
+
+  renderFeed();
+}
+
 function renderDigits(segment) {
   el.digitWindow.replaceChildren();
   for (let index = 0; index < WINDOW_SIZE; index += 1) {
@@ -450,12 +720,38 @@ function renderDigits(segment) {
   }
 }
 
+function renderGeometryWindow(samples) {
+  el.digitWindow.replaceChildren();
+  for (let index = 0; index < WINDOW_SIZE; index += 1) {
+    const sample = samples[index];
+    const cell = document.createElement("span");
+    const level = Math.max(0.08, Math.min(1, (sample.omega - 0.5) / 1.3));
+    cell.className = "digit-cell metric-cell";
+    cell.style.setProperty("--metric-level", level.toFixed(3));
+    if (index === 0) {
+      cell.classList.add("current");
+    }
+    if (sample.omega > 1.25 || Math.abs(sample.curvature) > 0.7) {
+      cell.classList.add("metric-hot");
+    } else if (sample.omega < 0.82) {
+      cell.classList.add("metric-cold");
+    }
+    const label = document.createElement("span");
+    label.textContent = index % 5 === 0 || index === 0 ? sample.omega.toFixed(2) : "";
+    cell.title = `sample ${sample.index + 1}: Omega=${sample.omega.toFixed(3)}, K=${sample.curvature.toFixed(3)}`;
+    cell.appendChild(label);
+    el.digitWindow.appendChild(cell);
+  }
+}
+
 function renderFeed() {
   el.discoveryCount.textContent = `${state.discoveries.length} found`;
   if (state.majorDiscoveries.length) {
     const latest = state.majorDiscoveries[0];
+    const coordinate = latest.mode === "geometry" ? "sample" : "pi";
+    const prefix = latest.mode === "geometry" ? `${latest.fieldKind} ` : "";
     el.majorBanner.hidden = false;
-    el.majorTitle.textContent = `${latest.level}: ${latest.title} at pi[${(latest.position + 1).toLocaleString()}]`;
+    el.majorTitle.textContent = `${latest.level}: ${latest.title} at ${prefix}${coordinate}[${(latest.position + 1).toLocaleString()}]`;
   } else {
     el.majorBanner.hidden = true;
     el.majorTitle.textContent = "-";
@@ -475,7 +771,9 @@ function renderFeed() {
     item.className = discovery.type;
 
     const time = document.createElement("time");
-    time.textContent = `pi digit ${Math.max(1, discovery.position + 1).toLocaleString()}`;
+    time.textContent = discovery.mode === "geometry"
+      ? `${discovery.fieldKind} sample ${Math.max(1, discovery.position + 1).toLocaleString()}`
+      : `pi digit ${Math.max(1, discovery.position + 1).toLocaleString()}`;
     const title = document.createElement("strong");
     title.textContent = discovery.title;
     const detail = document.createElement("p");
@@ -604,7 +902,33 @@ function classifyWindow(profile, run, repeat) {
   return "Quiet flight";
 }
 
+function classifyGeometry(profile) {
+  if (Math.abs(profile.dominantCurvature) > 0.75) {
+    return "Curved pocket";
+  }
+  if (profile.compression > 1.24) {
+    return "Metric stretch";
+  }
+  if (profile.fieldSpread < 0.026) {
+    return "Field convergence";
+  }
+  if (profile.parity) {
+    return "Odd parity sector";
+  }
+  return "Smooth geometry";
+}
+
 async function setPosition(value) {
+  if (isGeometryMode()) {
+    const next = Math.max(0, Math.floor(value));
+    state.traveled += Math.abs(next - state.position);
+    state.geometryArc += GeometryFlight.arcBetween(state.position, next, state.fieldKind);
+    state.position = next;
+    scanAt(state.position);
+    render();
+    return;
+  }
+
   if (state.streaming && value + WINDOW_SIZE > state.pi.length) {
     await ensureDigits(value + WINDOW_SIZE + 7000);
   }
@@ -615,6 +939,44 @@ async function setPosition(value) {
   scanAt(state.position);
   render();
 }
+
+function resetFlightState() {
+  state.position = 0;
+  state.traveled = 0;
+  state.geometryArc = 0;
+  state.verifiedPosition = 0;
+  state.running = false;
+  state.carry = 0;
+  state.lastProbe = null;
+}
+
+function setMode(mode) {
+  if (state.mode === mode) {
+    render();
+    return;
+  }
+  state.mode = mode;
+  resetFlightState();
+  render();
+}
+
+function setFieldKind(fieldKind) {
+  state.fieldKind = fieldKind;
+  resetFlightState();
+  render();
+}
+
+el.digitMode.addEventListener("click", () => {
+  setMode("digits");
+});
+
+el.geometryMode.addEventListener("click", () => {
+  setMode("geometry");
+});
+
+el.fieldKind.addEventListener("change", () => {
+  setFieldKind(el.fieldKind.value);
+});
 
 el.toggleRun.addEventListener("click", () => {
   state.running = !state.running;
@@ -631,12 +993,7 @@ el.reverseProbe.addEventListener("click", () => {
 });
 
 el.resetFlight.addEventListener("click", () => {
-  state.position = 0;
-  state.traveled = 0;
-  state.verifiedPosition = 0;
-  state.running = false;
-  state.carry = 0;
-  state.lastProbe = null;
+  resetFlightState();
   render();
 });
 
@@ -668,4 +1025,17 @@ el.jumpTo.addEventListener("keydown", (event) => {
   }
 });
 
+function applyInitialRoute() {
+  const params = new URLSearchParams(window.location.search);
+  const mode = params.get("mode");
+  const field = params.get("field");
+  if (mode === "geometry") {
+    state.mode = "geometry";
+  }
+  if (["pi_a", "pi_f", "pi_n"].includes(field)) {
+    state.fieldKind = field;
+  }
+}
+
+applyInitialRoute();
 loadPi();
